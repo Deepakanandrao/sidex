@@ -759,8 +759,6 @@
       "activationEvents": [
         "*"
       ],
-      "main": "./out/extension.js",
-      "browser": "./dist/browser/extension.js",
       "icon": "resources/icons/git.png",
       "scripts": {
         "compile": "gulp compile-extension:git-base",
