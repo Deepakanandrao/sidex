@@ -1044,11 +1044,17 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 				}
 			}
 			if (nonWebExtensions.length && nonWebExtensions.length === extensions.length) {
-				throw new ExtensionManagementError('Not supported in Web', ExtensionManagementErrorCode.Unsupported);
+				if ((globalThis as any).__SIDEX_TAURI__ === true) {
+					// SideX has a Node.js extension host — allow non-web extensions
+				} else {
+					throw new ExtensionManagementError('Not supported in Web', ExtensionManagementErrorCode.Unsupported);
+				}
 			}
 		}
 
-		const productName = localize('VS Code for Web', "{0} for the Web", this.productService.nameLong);
+		const productName = (globalThis as any).__SIDEX_TAURI__ === true
+			? this.productService.nameLong
+			: localize('VS Code for Web', "{0} for the Web", this.productService.nameLong);
 		const virtualWorkspaceSupport = this.extensionManifestPropertiesService.getExtensionVirtualWorkspaceSupportType(manifest);
 		const virtualWorkspaceSupportReason = getWorkspaceSupportTypeMessage(manifest.capabilities?.virtualWorkspaces);
 		const hasLimitedSupport = virtualWorkspaceSupport === 'limited' || !!virtualWorkspaceSupportReason;
