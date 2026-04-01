@@ -56,20 +56,23 @@
 
           if (url && (url.includes('open-vsx.org') || url.includes('openvsx.eclipsecontent.org'))) {
             try {
-              const { invoke } = await import('@tauri-apps/api/core');
-              const isTextRequest = init?.headers?.['Accept']?.includes('application/json')
-                || url.endsWith('.json')
-                || url.includes('/gallery/')
-                || url.includes('/vscode/');
-              if (isTextRequest) {
-                const text = await invoke('fetch_url_text', { url });
-                return new Response(text, {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' },
-                });
-              } else {
-                const bytes = await invoke('fetch_url', { url });
-                return new Response(new Uint8Array(bytes), { status: 200 });
+              // Use Tauri's internal invoke directly (not the npm module, since this is a non-module script)
+              var invoke = window.__TAURI_INTERNALS__?.invoke;
+              if (invoke) {
+                var isTextRequest = url.endsWith('.json')
+                  || url.includes('/gallery/')
+                  || url.includes('/vscode/')
+                  || url.includes('Manifest');
+                if (isTextRequest) {
+                  var text = await invoke('fetch_url_text', { url: url });
+                  return new Response(text, {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  });
+                } else {
+                  var bytes = await invoke('fetch_url', { url: url });
+                  return new Response(new Uint8Array(bytes), { status: 200 });
+                }
               }
             } catch (e) {
               console.warn('[SideX] Proxy fetch failed, falling back:', e);
