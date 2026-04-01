@@ -124,42 +124,10 @@ async function boot() {
 
 	create(document.body, options);
 
-	// Lazy-load heavy features after initial render to reduce startup memory
-	requestIdleCallback(() => loadDeferredFeatures(), { timeout: 8000 });
-
 	// Wire up native macOS menu actions → VSCode commands
 	setupMenuActions();
 
 	console.log('[SideX] Workbench created' + (folderParam ? ` (folder: ${folderParam})` : ' (no folder)'), 'workspace:', workspace);
-}
-
-async function loadDeferredFeatures() {
-	const deferredModules = [
-		() => import('./vs/workbench/contrib/notebook/browser/notebook.contribution.js'),
-		() => import('./vs/workbench/contrib/chat/browser/chat.contribution.js'),
-		() => import('./vs/workbench/contrib/inlineChat/browser/inlineChat.contribution.js'),
-		() => import('./vs/workbench/contrib/mcp/browser/mcp.contribution.js'),
-		() => import('./vs/workbench/contrib/testing/browser/testing.contribution.js'),
-		() => import('./vs/workbench/contrib/remote/common/remote.contribution.js'),
-		() => import('./vs/workbench/contrib/remote/browser/remote.contribution.js'),
-		() => import('./vs/workbench/contrib/interactive/browser/interactive.contribution.js'),
-		() => import('./vs/workbench/contrib/replNotebook/browser/repl.contribution.js'),
-		() => import('./vs/workbench/contrib/remoteCodingAgents/browser/remoteCodingAgents.contribution.js'),
-		() => import('./vs/workbench/contrib/chat/browser/chatSessions/chatSessions.contribution.js'),
-		() => import('./vs/workbench/contrib/chat/browser/contextContrib/chatContext.contribution.js'),
-		() => import('./vs/workbench/contrib/imageCarousel/browser/imageCarousel.contribution.js'),
-	];
-
-	for (const load of deferredModules) {
-		try {
-			await load();
-		} catch (e) {
-			console.warn('[SideX] Deferred feature load failed (non-fatal):', e);
-		}
-		// Yield between loads to keep UI responsive
-		await new Promise(r => setTimeout(r, 100));
-	}
-	console.log('[SideX] Deferred features loaded');
 }
 
 function setupMenuActions() {
