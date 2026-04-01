@@ -7,6 +7,8 @@ import { Emitter } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { isMacintosh, isWindows, OperatingSystem } from '../../../../base/common/platform.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 import {
 	IProcessDataEvent,
 	IProcessProperty,
@@ -111,6 +113,44 @@ class TauriPty extends Disposable implements ITerminalChildProcess {
 				envToPass['LANG'] = 'en_US.UTF-8';
 			}
 
+			// Shell integration injection
+			let shellArgs: string[] | undefined;
+			if (Array.isArray(args)) {
+				shellArgs = args as string[];
+			} else if (typeof args === 'string') {
+				shellArgs = [args];
+			}
+
+			const shellBasename = shell ? shell.split('/').pop() || '' : '';
+			const shellIntegrationEnabled = !this._shellLaunchConfig.ignoreShellIntegration;
+
+			if (shellIntegrationEnabled && shellBasename) {
+				envToPass['VSCODE_INJECTION'] = '1';
+				envToPass['VSCODE_SHELL_INTEGRATION'] = '1';
+
+				if (shellBasename === 'zsh') {
+					try {
+						const zdotdir = await _invoke('setup_zsh_dotdir', {}) as string;
+						if (zdotdir) {
+							envToPass['ZDOTDIR'] = zdotdir;
+							envToPass['USER_ZDOTDIR'] = envToPass['HOME'] || '';
+						}
+					} catch (e) {
+						console.warn('[SideX Terminal] Failed to set up zsh ZDOTDIR:', e);
+					}
+				} else if (shellBasename === 'bash') {
+					try {
+						const scriptsDir = await _invoke('get_shell_integration_dir', {}) as string;
+						if (scriptsDir) {
+							const rcFile = `${scriptsDir}/shellIntegration-bash.sh`;
+							shellArgs = ['--init-file', rcFile];
+						}
+					} catch (e) {
+						console.warn('[SideX Terminal] Failed to set up bash shell integration:', e);
+					}
+				}
+			}
+
 			const dataBuffer: string[] = [];
 			let attached = false;
 
@@ -131,13 +171,6 @@ class TauriPty extends Disposable implements ITerminalChildProcess {
 					this._onProcessExit.fire(payload.exit_code);
 				}
 			});
-
-			let shellArgs: string[] | undefined;
-			if (Array.isArray(args)) {
-				shellArgs = args as string[];
-			} else if (typeof args === 'string') {
-				shellArgs = [args];
-			}
 
 			const backendId = await _invoke('terminal_spawn', {
 				shell: shell ?? null,
@@ -162,6 +195,13 @@ class TauriPty extends Disposable implements ITerminalChildProcess {
 
 			this._onProcessReady.fire({ pid, cwd: this._cwd, windowsPty: undefined });
 			this._onDidChangeProperty.fire({ type: ProcessPropertyType.initialCwd, value: this._cwd });
+
+			const shellName = shellBasename || 'terminal';
+			this._onDidChangeProperty.fire({
+				type: ProcessPropertyType.Title,
+				value: shellName
+			} as IProcessProperty<ProcessPropertyType.Title>);
+
 			return undefined;
 		} catch (e: any) {
 			console.error('[SideX Terminal] Failed to spawn:', e);
@@ -288,9 +328,70 @@ class TauriTerminalBackend extends Disposable implements ITerminalBackend {
 		const defaultShell = await this.getDefaultSystemShell();
 		const defaultName = defaultShell.split('/').pop() || 'zsh';
 
+		await ensureTauri();
+
+		const iconMap: Record<string, ThemeIcon> = {
+			'zsh': Codicon.terminal,
+			'bash': Codicon.terminalBash,
+			'fish': Codicon.terminal,
+			'sh': Codicon.terminalLinux,
+			'pwsh': Codicon.terminalPowershell,
+			'powershell': Codicon.terminalPowershell,
+		};
+
+		interface ShellInfoResult {
+			name: string;
+			path: string;
+			is_default: boolean;
+		}
+
+		let detectedShells: ShellInfoResult[] = [];
+		if (_invoke) {
+			try {
+				detectedShells = await _invoke('get_available_shells', {}) as ShellInfoResult[];
+			} catch {
+				// Fallback: check shells individually
+			}
+		}
+
+		if (detectedShells.length > 0) {
+			const profiles: ITerminalProfile[] = [];
+			const seen = new Set<string>();
+
+			for (const shell of detectedShells) {
+				if (seen.has(shell.name)) {
+					continue;
+				}
+				seen.add(shell.name);
+				profiles.push({
+					profileName: shell.name,
+					path: shell.path,
+					isDefault: shell.is_default || shell.name === defaultName,
+					isAutoDetected: true,
+					icon: iconMap[shell.name] || Codicon.terminal,
+				});
+			}
+
+			if (!seen.has(defaultName)) {
+				profiles.unshift({
+					profileName: defaultName,
+					path: defaultShell,
+					isDefault: true,
+					isAutoDetected: false,
+					icon: iconMap[defaultName] || Codicon.terminal,
+				});
+			}
+
+			return profiles;
+		}
+
+		// Fallback: check each shell path individually via Rust
 		const knownShells: { path: string; profileName: string }[] = [
 			{ path: '/bin/zsh', profileName: 'zsh' },
 			{ path: '/bin/bash', profileName: 'bash' },
+			{ path: '/usr/bin/fish', profileName: 'fish' },
+			{ path: '/usr/local/bin/fish', profileName: 'fish' },
+			{ path: '/opt/homebrew/bin/fish', profileName: 'fish' },
 			{ path: '/bin/sh', profileName: 'sh' },
 		];
 
@@ -301,12 +402,27 @@ class TauriTerminalBackend extends Disposable implements ITerminalBackend {
 			if (seen.has(shell.profileName)) {
 				continue;
 			}
+
+			let exists = false;
+			if (_invoke) {
+				try {
+					exists = await _invoke('check_shell_exists', { path: shell.path }) as boolean;
+				} catch {
+					exists = false;
+				}
+			}
+
+			if (!exists) {
+				continue;
+			}
+
 			seen.add(shell.profileName);
 			profiles.push({
 				profileName: shell.profileName,
 				path: shell.path,
 				isDefault: shell.profileName === defaultName,
-				isAutoDetected: false,
+				isAutoDetected: true,
+				icon: iconMap[shell.profileName] || Codicon.terminal,
 			});
 		}
 
@@ -316,6 +432,7 @@ class TauriTerminalBackend extends Disposable implements ITerminalBackend {
 				path: defaultShell,
 				isDefault: true,
 				isAutoDetected: false,
+				icon: iconMap[defaultName] || Codicon.terminal,
 			});
 		}
 

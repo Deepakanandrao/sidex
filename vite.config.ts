@@ -55,8 +55,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-fs',
               '@tauri-apps/plugin-clipboard-manager', '@tauri-apps/plugin-shell',
-              '@tauri-apps/plugin-notification', '@tauri-apps/plugin-opener',
-              'vscode-textmate', 'vscode-oniguruma'],
+              '@tauri-apps/plugin-notification', '@tauri-apps/plugin-opener'],
   },
   worker: {
     format: 'es',

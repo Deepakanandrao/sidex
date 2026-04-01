@@ -32,7 +32,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "extension-host/*"
+      "extension-host/*",
+      "shell-integration/*"
     ],
     "icon": [
       "icons/32x32.png",

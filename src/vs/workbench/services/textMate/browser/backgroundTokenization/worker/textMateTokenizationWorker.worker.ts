@@ -76,10 +76,6 @@ export class TextMateTokenizationWorker implements IWebWorkerServerRequestHandle
 		const vscodeTextmate = await importAMDNodeModule<typeof import('vscode-textmate')>('vscode-textmate', 'release/main.js');
 		const vscodeOniguruma = await importAMDNodeModule<typeof import('vscode-oniguruma')>('vscode-oniguruma', 'release/main.js');
 		const response = await fetch(onigurumaWASMUri);
-
-		// Using the response directly only works if the server sets the MIME type 'application/wasm'.
-		// Otherwise, a TypeError is thrown when using the streaming compiler.
-		// We therefore use the non-streaming compiler :(.
 		const bytes = await response.arrayBuffer();
 		await vscodeOniguruma.loadWASM(bytes);
 

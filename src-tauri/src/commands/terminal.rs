@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct PtyHandle {
     writer: Box<dyn Write + Send>,
@@ -329,4 +329,136 @@ pub fn terminal_get_pid(
 #[tauri::command]
 pub fn get_default_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+}
+
+#[tauri::command]
+pub fn check_shell_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+pub fn get_available_shells() -> Vec<ShellInfo> {
+    let candidates: &[(&str, &str)] = if cfg!(target_os = "windows") {
+        &[
+            ("PowerShell", "powershell.exe"),
+            ("Command Prompt", "cmd.exe"),
+        ]
+    } else {
+        &[
+            ("zsh", "/bin/zsh"),
+            ("bash", "/bin/bash"),
+            ("fish", "/usr/bin/fish"),
+            ("fish", "/usr/local/bin/fish"),
+            ("fish", "/opt/homebrew/bin/fish"),
+            ("sh", "/bin/sh"),
+        ]
+    };
+
+    let default_shell = std::env::var("SHELL").unwrap_or_default();
+    let mut seen_names = std::collections::HashSet::new();
+    let mut shells = Vec::new();
+
+    for (name, shell_path) in candidates {
+        if std::path::Path::new(shell_path).exists() && seen_names.insert(name.to_string()) {
+            shells.push(ShellInfo {
+                name: name.to_string(),
+                path: shell_path.to_string(),
+                is_default: *shell_path == default_shell,
+            });
+        }
+    }
+
+    shells
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShellInfo {
+    pub name: String,
+    pub path: String,
+    pub is_default: bool,
+}
+
+#[tauri::command]
+pub fn get_shell_integration_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+    let scripts_dir = resource_dir.join("shell-integration");
+    Ok(scripts_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn setup_zsh_dotdir(app: tauri::AppHandle) -> Result<String, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let zdotdir = data_dir.join("zsh-integration");
+    std::fs::create_dir_all(&zdotdir)
+        .map_err(|e| format!("Failed to create zdotdir: {}", e))?;
+
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
+    let scripts_dir = resource_dir.join("shell-integration");
+
+    let zshrc_content = format!(
+        r#"# SideX Shell Integration - Auto-generated
+VSCODE_SHELL_INTEGRATION=1
+VSCODE_INJECTION=1
+if [[ -f "{scripts}/shellIntegration-rc.zsh" ]]; then
+    USER_ZDOTDIR="${{ZDOTDIR:-$HOME}}"
+    . "{scripts}/shellIntegration-rc.zsh"
+fi
+"#,
+        scripts = scripts_dir.to_string_lossy()
+    );
+
+    let zshrc_path = zdotdir.join(".zshrc");
+    std::fs::write(&zshrc_path, zshrc_content)
+        .map_err(|e| format!("Failed to write .zshrc: {}", e))?;
+
+    let zshenv_content = format!(
+        r#"# SideX Shell Integration - Auto-generated
+USER_ZDOTDIR="${{ZDOTDIR:-$HOME}}"
+if [[ -f "{scripts}/shellIntegration-env.zsh" ]]; then
+    . "{scripts}/shellIntegration-env.zsh"
+fi
+"#,
+        scripts = scripts_dir.to_string_lossy()
+    );
+
+    let zshenv_path = zdotdir.join(".zshenv");
+    std::fs::write(&zshenv_path, zshenv_content)
+        .map_err(|e| format!("Failed to write .zshenv: {}", e))?;
+
+    let zprofile_content = format!(
+        r#"# SideX Shell Integration - Auto-generated
+if [[ -f "{scripts}/shellIntegration-profile.zsh" ]]; then
+    . "{scripts}/shellIntegration-profile.zsh"
+fi
+"#,
+        scripts = scripts_dir.to_string_lossy()
+    );
+
+    let zprofile_path = zdotdir.join(".zprofile");
+    std::fs::write(&zprofile_path, zprofile_content)
+        .map_err(|e| format!("Failed to write .zprofile: {}", e))?;
+
+    let zlogin_content = format!(
+        r#"# SideX Shell Integration - Auto-generated
+if [[ -f "{scripts}/shellIntegration-login.zsh" ]]; then
+    . "{scripts}/shellIntegration-login.zsh"
+fi
+"#,
+        scripts = scripts_dir.to_string_lossy()
+    );
+
+    let zlogin_path = zdotdir.join(".zlogin");
+    std::fs::write(&zlogin_path, zlogin_content)
+        .map_err(|e| format!("Failed to write .zlogin: {}", e))?;
+
+    Ok(zdotdir.to_string_lossy().to_string())
 }

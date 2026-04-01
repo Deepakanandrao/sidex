@@ -20,6 +20,8 @@ pub struct GitLogEntry {
     pub message: String,
     pub author: String,
     pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_hashes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,6 +130,7 @@ pub async fn git_log(path: String, limit: Option<u32>) -> Result<Vec<GitLogEntry
             message: chunk[1].to_string(),
             author: chunk[2].to_string(),
             date: chunk[3].to_string(),
+            parent_hashes: None,
         })
         .collect();
 
@@ -336,4 +339,43 @@ pub async fn git_show(path: String, file: String) -> Result<Vec<u8>, String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(format!("git show error: {}", stderr.trim()))
     }
+}
+
+#[tauri::command]
+pub async fn git_run(path: String, args: Vec<String>) -> Result<String, String> {
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_git(&path, &arg_refs)
+}
+
+#[tauri::command]
+pub async fn git_log_graph(path: String, limit: Option<u32>) -> Result<Vec<GitLogEntry>, String> {
+    let limit_str = format!("-{}", limit.unwrap_or(50));
+    let output = run_git(
+        &path,
+        &[
+            "log",
+            "--format=%H%n%P%n%s%n%an%n%aI",
+            &limit_str,
+        ],
+    )?;
+
+    let lines: Vec<&str> = output.lines().collect();
+    let entries = lines
+        .chunks(5)
+        .filter(|chunk| chunk.len() == 5)
+        .map(|chunk| GitLogEntry {
+            hash: chunk[0].to_string(),
+            message: chunk[2].to_string(),
+            author: chunk[3].to_string(),
+            date: chunk[4].to_string(),
+            parent_hashes: Some(
+                chunk[1]
+                    .split_whitespace()
+                    .map(|s| s.to_string())
+                    .collect(),
+            ),
+        })
+        .collect();
+
+    Ok(entries)
 }

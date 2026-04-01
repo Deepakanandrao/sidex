@@ -1,4 +1,34 @@
+use std::fs;
+use std::path::Path;
+
 fn main() {
-  tauri_build::build()
+    let scripts_src = Path::new("../src/vs/workbench/contrib/terminal/common/scripts");
+    let scripts_dst = Path::new("shell-integration");
+
+    if scripts_src.exists() {
+        fs::create_dir_all(scripts_dst).expect("Failed to create shell-integration dir");
+
+        let shell_files = [
+            "shellIntegration-rc.zsh",
+            "shellIntegration-env.zsh",
+            "shellIntegration-profile.zsh",
+            "shellIntegration-login.zsh",
+            "shellIntegration-bash.sh",
+            "shellIntegration.fish",
+            "shellIntegration.ps1",
+        ];
+
+        for file in &shell_files {
+            let src = scripts_src.join(file);
+            let dst = scripts_dst.join(file);
+            if src.exists() {
+                fs::copy(&src, &dst).unwrap_or_else(|e| {
+                    panic!("Failed to copy {}: {}", file, e);
+                });
+                println!("cargo:rerun-if-changed={}", src.display());
+            }
+        }
+    }
+
+    tauri_build::build()
 }
-  

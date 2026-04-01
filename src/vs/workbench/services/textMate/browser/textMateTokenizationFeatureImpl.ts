@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { canASAR, importAMDNodeModule, resolveAmdNodeModulePath } from '../../../../amdX.js';
+import { importAMDNodeModule } from '../../../../amdX.js';
 import * as domStylesheets from '../../../../base/browser/domStylesheets.js';
 import { equals as equalArray } from '../../../../base/common/arrays.js';
 import { Color } from '../../../../base/common/color.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
-import { FileAccess, nodeModulesAsarUnpackedPath, nodeModulesPath } from '../../../../base/common/network.js';
 import { IObservable, observableFromEvent } from '../../../../base/common/observable.js';
 import { isWeb } from '../../../../base/common/platform.js';
 import * as resources from '../../../../base/common/resources.js';
@@ -39,6 +38,22 @@ import { IValidEmbeddedLanguagesMap, IValidGrammarDefinition, IValidTokenTypeMap
 import { ITextMateThemingRule, IWorkbenchColorTheme, IWorkbenchThemeService } from '../../themes/common/workbenchThemeService.js';
 import type { IGrammar, IOnigLib, IRawTheme } from 'vscode-textmate';
 import { IFontTokenOptions } from '../../../../platform/theme/common/themeService.js';
+
+const isTauri = !!(globalThis as any).__SIDEX_TAURI__;
+
+async function loadVscodeTextmate(): Promise<typeof import('vscode-textmate')> {
+	if (isTauri) {
+		return import('vscode-textmate');
+	}
+	return importAMDNodeModule<typeof import('vscode-textmate')>('vscode-textmate', 'release/main.js');
+}
+
+async function loadVscodeOniguruma(): Promise<typeof import('vscode-oniguruma')> {
+	if (isTauri) {
+		return import('vscode-oniguruma');
+	}
+	return importAMDNodeModule<typeof import('vscode-oniguruma')>('vscode-oniguruma', 'release/main.js');
+}
 
 export class TextMateTokenizationFeature extends Disposable implements ITextMateTokenizationService {
 	private static reportTokenizationTimeCounter = { sync: 0, async: 0 };
@@ -259,7 +274,7 @@ export class TextMateTokenizationFeature extends Disposable implements ITextMate
 			return this._grammarFactory;
 		}
 
-		const [vscodeTextmate, vscodeOniguruma] = await Promise.all([importAMDNodeModule<typeof import('vscode-textmate')>('vscode-textmate', 'release/main.js'), this._getVSCodeOniguruma()]);
+		const [vscodeTextmate, vscodeOniguruma] = await Promise.all([loadVscodeTextmate(), this._getVSCodeOniguruma()]);
 		const onigLib: Promise<IOnigLib> = Promise.resolve({
 			createOnigScanner: (sources: string[]) => vscodeOniguruma.createOnigScanner(sources),
 			createOnigString: (str: string) => vscodeOniguruma.createOnigString(str)
@@ -328,10 +343,12 @@ export class TextMateTokenizationFeature extends Disposable implements ITextMate
 			return new TokenizationSupportWithLineLimit(encodedLanguageId, tokenization, store, maxTokenizationLineLength);
 		} catch (err) {
 			if (err.message && err.message === missingTMGrammarErrorMessage) {
-				// Don't log this error message
 				return null;
 			}
 			this._logService.error(`[TextMate] Failed to create tokenization support for ${languageId}:`, err);
+			if (err instanceof Error) {
+				this._logService.error(`[TextMate] Stack:`, err.stack);
+			}
 			onUnexpectedError(err);
 			return null;
 		}
@@ -377,7 +394,7 @@ export class TextMateTokenizationFeature extends Disposable implements ITextMate
 		if (!this._vscodeOniguruma) {
 			this._vscodeOniguruma = (async () => {
 				this._logService.trace('[TextMate] Loading vscode-oniguruma and WASM...');
-				const [vscodeOniguruma, wasm] = await Promise.all([importAMDNodeModule<typeof import('vscode-oniguruma')>('vscode-oniguruma', 'release/main.js'), this._loadVSCodeOnigurumaWASM()]);
+				const [vscodeOniguruma, wasm] = await Promise.all([loadVscodeOniguruma(), this._loadVSCodeOnigurumaWASM()]);
 				this._logService.trace('[TextMate] Initializing oniguruma WASM...');
 				await vscodeOniguruma.loadWASM({
 					data: wasm,
@@ -393,23 +410,17 @@ export class TextMateTokenizationFeature extends Disposable implements ITextMate
 	}
 
 	private async _loadVSCodeOnigurumaWASM(): Promise<Response | ArrayBuffer> {
-		if (isWeb) {
+		if (isTauri || isWeb) {
 			const wasmUrl = new URL('/onig.wasm', globalThis.location?.origin ?? '').href;
-			let response: Response;
-			try {
-				response = await fetch(wasmUrl);
-				if (!response.ok) {
-					throw new Error(`Failed to fetch ${wasmUrl}: ${response.status}`);
-				}
-			} catch {
-				const fallbackUrl = resolveAmdNodeModulePath('vscode-oniguruma', 'release/onig.wasm');
-				response = await fetch(fallbackUrl);
-				if (!response.ok) {
-					throw new Error(`Failed to fetch onig.wasm from both ${wasmUrl} and ${fallbackUrl}`);
-				}
+			this._logService.trace(`[TextMate] Fetching onig.wasm from ${wasmUrl}`);
+			const response = await fetch(wasmUrl);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch onig.wasm from ${wasmUrl}: ${response.status} ${response.statusText}`);
 			}
 			return await response.arrayBuffer();
 		} else {
+			const { canASAR } = await import('../../../../amdX.js');
+			const { FileAccess, nodeModulesAsarUnpackedPath, nodeModulesPath } = await import('../../../../base/common/network.js');
 			const response = await fetch(canASAR && this._environmentService.isBuilt
 				? FileAccess.asBrowserUri(`${nodeModulesAsarUnpackedPath}/vscode-oniguruma/release/onig.wasm`).toString(true)
 				: FileAccess.asBrowserUri(`${nodeModulesPath}/vscode-oniguruma/release/onig.wasm`).toString(true));

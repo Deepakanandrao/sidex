@@ -39,7 +39,7 @@ async function boot() {
 		// The workspace provider tells VSCode what folder/workspace to open
 		workspaceProvider: {
 			workspace,
-			trusted: true,
+			trusted: false,
 			open: async (_workspace: any, _options: any) => {
 				// When VSCode asks to open a new workspace, reload with the folder param
 				if (_workspace && 'folderUri' in _workspace) {
@@ -89,6 +89,36 @@ async function boot() {
 			'workbench.settings.enableNaturalLanguageSearch': false,
 			'chat.editor.enabled': false,
 			'chat.commandCenter.enabled': false,
+			'editor.bracketPairColorization.enabled': true,
+			'editor.guides.bracketPairs': true,
+			'editor.linkedEditing': true,
+			'editor.suggest.showStatusBar': true,
+			'editor.inlineSuggest.enabled': true,
+			'editor.stickyScroll.enabled': true,
+			'editor.minimap.enabled': true,
+			'editor.formatOnPaste': false,
+			'editor.renderWhitespace': 'selection',
+			'editor.smoothScrolling': true,
+			'editor.cursorBlinking': 'smooth',
+			'editor.cursorSmoothCaretAnimation': 'on',
+			'editor.mouseWheelZoom': true,
+			'editor.wordWrap': 'off',
+			'editor.suggest.preview': true,
+			'editor.parameterHints.enabled': true,
+			'editor.hover.enabled': true,
+			'editor.folding': true,
+			'editor.foldingImportsByDefault': true,
+			'editor.showFoldingControls': 'mouseover',
+			'editor.glyphMargin': true,
+			'editor.lightbulb.enabled': 'on',
+			'editor.colorDecorators': true,
+			'editor.renderLineHighlight': 'all',
+			'editor.matchBrackets': 'always',
+			'editor.occurrencesHighlight': 'singleFile',
+			'workbench.editor.highlightModifiedTabs': true,
+			'workbench.tree.renderIndentGuides': 'always',
+			'security.workspace.trust.startupPrompt': 'once',
+			'security.workspace.trust.banner': 'untilDismissed',
 		},
 	};
 

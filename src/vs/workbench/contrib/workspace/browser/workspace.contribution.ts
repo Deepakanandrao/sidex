@@ -581,11 +581,6 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 	private get bannerSetting(): 'always' | 'untilDismissed' | 'never' {
 		const result = this.configurationService.getValue<'always' | 'untilDismissed' | 'never'>(WORKSPACE_TRUST_BANNER);
 
-		// In serverless environments, we don't need to aggressively show the banner
-		if (result !== 'always' && isWeb && !this.remoteAgentService.getConnection()?.remoteAuthority) {
-			return 'never';
-		}
-
 		return result;
 	}
 

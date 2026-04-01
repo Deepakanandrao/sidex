@@ -53,6 +53,7 @@ interface TauriGitLogEntry {
 	message: string;
 	author: string;
 	date: string;
+	parent_hashes?: string[];
 }
 
 let _invoke: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | undefined;
@@ -120,15 +121,25 @@ class TauriGitOriginalFileProvider implements IFileSystemProvider {
 
 	async readFile(resource: URI): Promise<Uint8Array> {
 		const filePath = resource.path.startsWith('/') ? resource.path.slice(1) : resource.path;
+		const gitRef = resource.query || 'HEAD';
 		const invoke = await getTauriInvoke();
 		if (!invoke) {
 			return new Uint8Array();
 		}
 		try {
-			const bytes = await invoke('git_show', { path: this._workspaceRoot, file: filePath }) as number[];
-			return new Uint8Array(bytes);
+			const revFile = `${gitRef}:${filePath}`;
+			const output = await invoke('git_run', {
+				path: this._workspaceRoot,
+				args: ['show', revFile],
+			}) as string;
+			return new TextEncoder().encode(output);
 		} catch {
-			return new Uint8Array();
+			try {
+				const bytes = await invoke('git_show', { path: this._workspaceRoot, file: filePath }) as number[];
+				return new Uint8Array(bytes);
+			} catch {
+				return new Uint8Array();
+			}
 		}
 	}
 
@@ -277,23 +288,85 @@ class TauriGitHistoryProvider implements ISCMHistoryProvider {
 	) { }
 
 	updateRef(branch: string, headHash?: string): void {
-		this._historyItemRef.set({
+		const newRef: ISCMHistoryItemRef = {
 			id: `refs/heads/${branch}`,
 			name: branch,
 			revision: headHash,
 			icon: ThemeIcon.fromId('git-branch'),
-		}, undefined);
+		};
+
+		const oldRef = this._historyItemRef.get();
+		this._historyItemRef.set(newRef, undefined);
+
+		this._resolveRemoteRef(branch, headHash);
+
+		if (oldRef?.revision !== headHash) {
+			this._historyItemRefChanges.set({
+				added: oldRef ? [] : [newRef],
+				removed: [],
+				modified: oldRef ? [newRef] : [],
+				silent: false,
+			}, undefined);
+		}
+	}
+
+	private async _resolveRemoteRef(branch: string, _headHash?: string): Promise<void> {
+		try {
+			const invoke = await getTauriInvoke();
+			if (!invoke) { return; }
+
+			const trackingBranch = (await invoke('git_run', {
+				path: this._rootPath,
+				args: ['config', '--get', `branch.${branch}.remote`],
+			}) as string).trim();
+
+			if (trackingBranch) {
+				const remoteBranch = (await invoke('git_run', {
+					path: this._rootPath,
+					args: ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`],
+				}) as string).trim();
+
+				const remoteHash = (await invoke('git_run', {
+					path: this._rootPath,
+					args: ['rev-parse', remoteBranch],
+				}) as string).trim();
+
+				this._historyItemRemoteRef.set({
+					id: `refs/remotes/${remoteBranch}`,
+					name: remoteBranch,
+					revision: remoteHash,
+					icon: ThemeIcon.fromId('cloud'),
+				}, undefined);
+
+				this._historyItemBaseRef.set({
+					id: `refs/remotes/${remoteBranch}`,
+					name: remoteBranch,
+					revision: remoteHash,
+					icon: ThemeIcon.fromId('git-commit'),
+				}, undefined);
+			}
+		} catch {
+			// No upstream configured
+		}
 	}
 
 	async provideHistoryItemRefs(_historyItemRefs?: string[], _token?: CancellationToken): Promise<ISCMHistoryItemRef[] | undefined> {
+		const refs: ISCMHistoryItemRef[] = [];
 		const current = this._historyItemRef.get();
-		return current ? [current] : [];
+		if (current) {
+			refs.push(current);
+		}
+		const remote = this._historyItemRemoteRef.get();
+		if (remote) {
+			refs.push(remote);
+		}
+		return refs;
 	}
 
 	async provideHistoryItems(options: ISCMHistoryOptions, _token?: CancellationToken): Promise<ISCMHistoryItem[] | undefined> {
 		try {
 			const limit = typeof options.limit === 'number' ? options.limit : 50;
-			const entries = await invokeGit<TauriGitLogEntry[]>('git_log', {
+			const entries = await invokeGit<TauriGitLogEntry[]>('git_log_graph', {
 				path: this._rootPath,
 				limit: limit + (options.skip ?? 0),
 			});
@@ -305,16 +378,24 @@ class TauriGitHistoryProvider implements ISCMHistoryProvider {
 			const skip = options.skip ?? 0;
 			const sliced = skip > 0 ? entries.slice(skip) : entries;
 
-			return sliced.map(entry => ({
-				id: entry.hash,
-				parentIds: [],
-				subject: entry.message,
-				message: entry.message,
-				displayId: entry.hash.substring(0, 7),
-				author: entry.author,
-				timestamp: new Date(entry.date).getTime(),
-				references: [],
-			} satisfies ISCMHistoryItem));
+			const currentRef = this._historyItemRef.get();
+
+			return sliced.map((entry, index) => {
+				const references: ISCMHistoryItemRef[] = [];
+				if (index === 0 && skip === 0 && currentRef) {
+					references.push(currentRef);
+				}
+				return {
+					id: entry.hash,
+					parentIds: entry.parent_hashes ?? [],
+					subject: entry.message,
+					message: entry.message,
+					displayId: entry.hash.substring(0, 7),
+					author: entry.author,
+					timestamp: new Date(entry.date).getTime(),
+					references,
+				} satisfies ISCMHistoryItem;
+			});
 		} catch (err) {
 			this._logService.warn('[TauriGit] git_log failed', err);
 			return [];
@@ -337,11 +418,14 @@ class TauriGitHistoryProvider implements ISCMHistoryProvider {
 					args: ['diff-tree', '--no-commit-id', '-r', '--name-status', parentRef, historyItemId],
 				}) as string;
 			} catch {
-				// git_run may not exist; fall back to returning empty
-				nameOutput = await invoke('git_run', {
-					path: this._rootPath,
-					args: ['diff-tree', '--no-commit-id', '-r', '--name-only', historyItemId],
-				}) as string;
+				try {
+					nameOutput = await invoke('git_run', {
+						path: this._rootPath,
+						args: ['diff-tree', '--no-commit-id', '-r', '--name-only', historyItemId],
+					}) as string;
+				} catch {
+					return [];
+				}
 			}
 
 			if (!nameOutput || !nameOutput.trim()) {
@@ -356,8 +440,8 @@ class TauriGitHistoryProvider implements ISCMHistoryProvider {
 					const fileUri = URI.joinPath(this._rootUri, filePath.trim());
 					return {
 						uri: fileUri,
-						originalUri: fileUri.with({ scheme: 'git', query: parentRef }),
-						modifiedUri: fileUri.with({ scheme: 'git', query: historyItemId }),
+						originalUri: fileUri.with({ scheme: GIT_ORIGINAL_SCHEME, query: parentRef }),
+						modifiedUri: fileUri.with({ scheme: GIT_ORIGINAL_SCHEME, query: historyItemId }),
 					} satisfies ISCMHistoryItemChange;
 				});
 		} catch (err) {
@@ -380,7 +464,20 @@ class TauriGitHistoryProvider implements ISCMHistoryProvider {
 	}
 
 	async resolveHistoryItemRefsCommonAncestor(_historyItemRefs: string[], _token?: CancellationToken): Promise<string | undefined> {
-		return undefined;
+		if (_historyItemRefs.length < 2) {
+			return _historyItemRefs[0];
+		}
+		try {
+			const invoke = await getTauriInvoke();
+			if (!invoke) { return undefined; }
+			const result = (await invoke('git_run', {
+				path: this._rootPath,
+				args: ['merge-base', _historyItemRefs[0], _historyItemRefs[1]],
+			}) as string).trim();
+			return result || undefined;
+		} catch {
+			return undefined;
+		}
 	}
 }
 

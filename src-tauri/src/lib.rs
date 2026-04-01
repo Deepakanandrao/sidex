@@ -1,7 +1,9 @@
 mod commands;
 
+use commands::debug::DebugAdapterStore;
 use commands::ext_host::ExtHostProcess;
 use commands::storage::StorageDb;
+use commands::tasks::TaskProcessStore;
 use commands::terminal::TerminalStore;
 use std::sync::Arc;
 use tauri::Manager;
@@ -159,6 +161,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(TerminalStore::new()))
+        .manage(Arc::new(DebugAdapterStore::new()))
+        .manage(Arc::new(TaskProcessStore::new()))
         .manage(ExtHostProcess::new())
         .setup(|app| {
             let app_data = app
@@ -210,6 +214,10 @@ pub fn run() {
             commands::terminal_kill,
             commands::terminal_get_pid,
             commands::get_default_shell,
+            commands::check_shell_exists,
+            commands::get_available_shells,
+            commands::get_shell_integration_dir,
+            commands::setup_zsh_dotdir,
             commands::search_files,
             commands::search_text,
             commands::create_window,
@@ -242,12 +250,21 @@ pub fn run() {
             commands::git_clone,
             commands::git_reset,
             commands::git_show,
+            commands::git_run,
+            commands::git_log_graph,
             commands::start_extension_host,
             commands::stop_extension_host,
             commands::extension_host_port,
             commands::fetch_url,
             commands::fetch_url_text,
             commands::proxy_request,
+            commands::debug_spawn_adapter,
+            commands::debug_send,
+            commands::debug_kill,
+            commands::debug_list_adapters,
+            commands::task_spawn,
+            commands::task_kill,
+            commands::task_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
