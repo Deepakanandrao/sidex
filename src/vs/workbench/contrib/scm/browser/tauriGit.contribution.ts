@@ -448,52 +448,67 @@ class TauriGitContribution extends Disposable implements IWorkbenchContribution 
 			// No-op for now — would open all changed files
 		}));
 
-		this._register(CommandsRegistry.registerCommand('tauri-git.stageFile', async (_accessor, resource) => {
+		this._register(CommandsRegistry.registerCommand('tauri-git.stageFile', async (_accessor, ...args: any[]) => {
 			try {
-				if (resource?.sourceUri) {
-					await invokeGit('git_add', { path: rootPath, files: [resource.sourceUri.fsPath] });
+				const resource = args[0];
+				const uri = resource?.sourceUri ?? resource;
+				if (uri?.fsPath) {
+					await invokeGit('git_add', { path: rootPath, files: [uri.fsPath] });
 					await provider.refresh();
 				}
 			} catch (err) {
-				this.logService.error('[TauriGit] stage file failed', err);
+				console.error('[TauriGit] stage file failed', err);
 			}
 		}));
 
-		this._register(CommandsRegistry.registerCommand('tauri-git.discardFile', async (_accessor, resource) => {
+		this._register(CommandsRegistry.registerCommand('tauri-git.discardFile', async (_accessor, ...args: any[]) => {
 			try {
-				if (resource?.sourceUri) {
-					const invoke = await getTauriInvoke();
-					if (invoke) {
-						await invoke('git_checkout', { path: rootPath, branch: resource.sourceUri.fsPath });
-					}
+				const resource = args[0];
+				const uri = resource?.sourceUri ?? resource;
+				if (uri?.fsPath) {
+					await invokeGit('git_checkout', { path: rootPath, branch: '-- ' + uri.fsPath });
 					await provider.refresh();
 				}
 			} catch (err) {
-				this.logService.error('[TauriGit] discard file failed', err);
+				console.error('[TauriGit] discard file failed', err);
 			}
 		}));
 
-		this._register(CommandsRegistry.registerCommand('tauri-git.openFile', async (_accessor, resource) => {
-			// No-op for now — would open the file in editor
+		this._register(CommandsRegistry.registerCommand('tauri-git.openFile', async (_accessor, ...args: any[]) => {
+			try {
+				const resource = args[0];
+				const uri = resource?.sourceUri ?? resource;
+				if (uri) {
+					const commandService = (globalThis as any).__sidex_commandService;
+					if (commandService) {
+						await commandService.executeCommand('vscode.open', uri);
+					}
+				}
+			} catch (err) {
+				console.error('[TauriGit] open file failed', err);
+			}
 		}));
 
-		this._register(CommandsRegistry.registerCommand('tauri-git.unstageFile', async (_accessor, resource) => {
+		this._register(CommandsRegistry.registerCommand('tauri-git.unstageFile', async (_accessor, ...args: any[]) => {
 			try {
-				if (resource?.sourceUri) {
-					const invoke = await getTauriInvoke();
-					if (invoke) {
-						await invoke('git_checkout', { path: rootPath, branch: 'HEAD -- ' + resource.sourceUri.fsPath });
-					}
+				const resource = args[0];
+				const uri = resource?.sourceUri ?? resource;
+				if (uri?.fsPath) {
+					await invokeGit('git_reset', { path: rootPath, files: [uri.fsPath] });
 					await provider.refresh();
 				}
 			} catch (err) {
-				this.logService.error('[TauriGit] unstage file failed', err);
+				console.error('[TauriGit] unstage file failed', err);
 			}
 		}));
 
 		this._register(CommandsRegistry.registerCommand('tauri-git.unstageAll', async () => {
-			// TODO: git reset HEAD to unstage all
-			await provider.refresh();
+			try {
+				await invokeGit('git_reset', { path: rootPath, files: ['.'] });
+				await provider.refresh();
+			} catch (err) {
+				console.error('[TauriGit] unstage all failed', err);
+			}
 		}));
 	}
 }

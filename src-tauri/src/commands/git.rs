@@ -311,3 +311,12 @@ pub async fn git_clone(url: String, path: String) -> Result<(), String> {
         Err(format!("git clone error: {}", stderr.trim()))
     }
 }
+
+#[tauri::command]
+pub async fn git_reset(path: String, files: Vec<String>) -> Result<(), String> {
+    let mut cmd = vec!["reset", "HEAD", "--"];
+    let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
+    cmd.extend(file_refs);
+    run_git(&path, &cmd)?;
+    Ok(())
+}
