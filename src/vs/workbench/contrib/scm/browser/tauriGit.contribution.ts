@@ -604,6 +604,33 @@ MenuRegistry.appendMenuItem(MenuId.SCMSourceControl, {
 	order: 2,
 });
 
+// Register on SCMSourceControlTitle as well (right-click on repository)
+MenuRegistry.appendMenuItem(MenuId.SCMSourceControlTitle, {
+	command: { id: 'tauri-git.pull', title: 'Pull' },
+	group: '1_sync',
+	order: 1,
+});
+MenuRegistry.appendMenuItem(MenuId.SCMSourceControlTitle, {
+	command: { id: 'tauri-git.push', title: 'Push' },
+	group: '1_sync',
+	order: 2,
+});
+MenuRegistry.appendMenuItem(MenuId.SCMSourceControlTitle, {
+	command: { id: 'tauri-git.fetch', title: 'Fetch' },
+	group: '1_sync',
+	order: 3,
+});
+MenuRegistry.appendMenuItem(MenuId.SCMSourceControlTitle, {
+	command: { id: 'tauri-git.checkoutTo', title: 'Checkout to...' },
+	group: '4_branch',
+	order: 1,
+});
+MenuRegistry.appendMenuItem(MenuId.SCMSourceControlTitle, {
+	command: { id: 'tauri-git.createBranch', title: 'Create Branch...' },
+	group: '4_branch',
+	order: 2,
+});
+
 // Register SCM title toolbar actions (the 4 buttons next to "CHANGES")
 MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
 	command: { id: 'tauri-git.commit', title: 'Commit', icon: ThemeIcon.fromId('check') },
