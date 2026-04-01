@@ -79,8 +79,9 @@ async function boot() {
 			'scm.defaultViewMode': 'list',
 			'telemetry.telemetryLevel': 'off',
 			'update.mode': 'none',
+			'update.showReleaseNotes': false,
 			'extensions.autoUpdate': false,
-			'extensions.autoCheckUpdates': true,
+			'extensions.autoCheckUpdates': false,
 			'workbench.settings.enableNaturalLanguageSearch': false,
 		},
 	};

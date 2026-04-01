@@ -8,7 +8,7 @@ const crypto = require('crypto');
 // ── Minimal WebSocket server (no dependencies) ─────────────────────────
 // Implements RFC 6455 enough to handle text frames from SideX's webview.
 
-const WS_MAGIC = '258EAFA5-E914-47DA-95CA-5AB9DC115B6D';
+const WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 function acceptKey(key) {
   return crypto.createHash('sha1').update(key + WS_MAGIC).digest('base64');
