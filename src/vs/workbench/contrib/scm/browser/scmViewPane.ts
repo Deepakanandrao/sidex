@@ -1103,7 +1103,6 @@ class SetListViewModeNavigationAction extends SetListViewModeAction {
 				id: MenuId.SCMTitle,
 				when: ContextKeyExpr.and(ContextKeyExpr.equals('view', VIEW_PANE_ID), ContextKeys.RepositoryCount.notEqualsTo(0), ContextKeys.SCMViewMode.isEqualTo(ViewMode.Tree)),
 				group: 'navigation',
-				isHiddenByDefault: true,
 				order: -1000
 			});
 	}
@@ -1138,7 +1137,6 @@ class SetTreeViewModeNavigationAction extends SetTreeViewModeAction {
 				id: MenuId.SCMTitle,
 				when: ContextKeyExpr.and(ContextKeyExpr.equals('view', VIEW_PANE_ID), ContextKeys.RepositoryCount.notEqualsTo(0), ContextKeys.SCMViewMode.isEqualTo(ViewMode.List)),
 				group: 'navigation',
-				isHiddenByDefault: true,
 				order: -1000
 			});
 	}

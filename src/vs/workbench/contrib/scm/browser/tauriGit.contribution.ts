@@ -34,6 +34,8 @@ import type { IFileSystemProvider, IStat, IFileDeleteOptions, IFileOverwriteOpti
 import type { ITextModel } from '../../../../editor/common/model.js';
 import type { Command } from '../../../../editor/common/languages.js';
 import type { Event } from '../../../../base/common/event.js';
+import { IDecorationsService, IDecorationsProvider, IDecorationData } from '../../../services/decorations/common/decorations.js';
+import { registerColor } from '../../../../platform/theme/common/colorRegistry.js';
 
 // ─── Tauri invoke() bridge ──────────────────────────────────────────────────
 
@@ -187,6 +189,10 @@ class TauriGitResource implements ISCMResource {
 		}
 	}
 
+	get statusLabel(): string {
+		return this._status;
+	}
+
 	async open(_preserveFocus: boolean): Promise<void> {
 		const commandService = (globalThis as any).__sidex_commandService;
 		if (!commandService) {
@@ -202,18 +208,18 @@ class TauriGitResource implements ISCMResource {
 	private static _decorationForStatus(status: string): ISCMResourceDecorations {
 		switch (status) {
 			case 'modified':
-				return { tooltip: 'Modified', icon: ThemeIcon.fromId('diff-modified') };
+				return { tooltip: 'Modified', icon: ThemeIcon.fromId('diff-modified'), faded: false };
 			case 'added':
 			case 'new file':
-				return { tooltip: 'Added', icon: ThemeIcon.fromId('diff-added') };
+				return { tooltip: 'Added', icon: ThemeIcon.fromId('diff-added'), faded: false };
 			case 'deleted':
-				return { tooltip: 'Deleted', icon: ThemeIcon.fromId('diff-removed'), strikeThrough: true };
+				return { tooltip: 'Deleted', icon: ThemeIcon.fromId('diff-removed'), strikeThrough: true, faded: false };
 			case 'renamed':
-				return { tooltip: 'Renamed', icon: ThemeIcon.fromId('diff-renamed') };
+				return { tooltip: 'Renamed', icon: ThemeIcon.fromId('diff-renamed'), faded: false };
 			case 'untracked':
-				return { tooltip: 'Untracked', icon: ThemeIcon.fromId('question'), faded: true };
+				return { tooltip: 'Untracked', icon: ThemeIcon.fromId('diff-added'), faded: false };
 			default:
-				return { tooltip: status };
+				return { tooltip: status, faded: false };
 		}
 	}
 }
@@ -653,6 +659,111 @@ class TauriGitSCMProvider extends Disposable implements ISCMProvider {
 	}
 }
 
+// ─── Git Decoration Colors ──────────────────────────────────────────────────
+
+const gitDecorationModifiedFg = registerColor('gitDecoration.modifiedResourceForeground', { dark: '#E2C08D', light: '#895503', hcDark: '#E2C08D', hcLight: '#895503' }, 'Color for modified git resources.');
+const gitDecorationDeletedFg = registerColor('gitDecoration.deletedResourceForeground', { dark: '#c74e39', light: '#ad0707', hcDark: '#c74e39', hcLight: '#ad0707' }, 'Color for deleted git resources.');
+const gitDecorationUntrackedFg = registerColor('gitDecoration.untrackedResourceForeground', { dark: '#73C991', light: '#007100', hcDark: '#73C991', hcLight: '#007100' }, 'Color for untracked git resources.');
+const gitDecorationAddedFg = registerColor('gitDecoration.addedResourceForeground', { dark: '#81b88b', light: '#587c0c', hcDark: '#a1e3ad', hcLight: '#374e06' }, 'Color for added git resources.');
+const gitDecorationRenamedFg = registerColor('gitDecoration.renamedResourceForeground', { dark: '#73C991', light: '#007100', hcDark: '#73C991', hcLight: '#007100' }, 'Color for renamed git resources.');
+const gitDecorationIgnoredFg = registerColor('gitDecoration.ignoredResourceForeground', { dark: '#8C8C8C', light: '#8E8E90', hcDark: '#A7A8A9', hcLight: '#8e8e90' }, 'Color for ignored git resources.');
+const gitDecorationStageModifiedFg = registerColor('gitDecoration.stageModifiedResourceForeground', { dark: '#E2C08D', light: '#895503', hcDark: '#E2C08D', hcLight: '#895503' }, 'Color for staged modified git resources.');
+const gitDecorationStageDeletedFg = registerColor('gitDecoration.stageDeletedResourceForeground', { dark: '#c74e39', light: '#ad0707', hcDark: '#c74e39', hcLight: '#ad0707' }, 'Color for staged deleted git resources.');
+const gitDecorationConflictingFg = registerColor('gitDecoration.conflictingResourceForeground', { dark: '#e4676b', light: '#ad0707', hcDark: '#c74e39', hcLight: '#ad0707' }, 'Color for conflicting git resources.');
+const gitDecorationSubmoduleFg = registerColor('gitDecoration.submoduleResourceForeground', { dark: '#8db9e2', light: '#1258a7', hcDark: '#8db9e2', hcLight: '#1258a7' }, 'Color for submodule git resources.');
+
+// ─── Git File Decoration Provider ───────────────────────────────────────────
+
+class TauriGitDecorationProvider implements IDecorationsProvider {
+
+	readonly label = 'Git';
+
+	private readonly _onDidChange = new Emitter<readonly URI[]>();
+	readonly onDidChange: Event<readonly URI[]> = this._onDidChange.event;
+
+	private _decorationMap = new Map<string, { status: string; staged: boolean }>();
+
+	updateResources(resources: { uri: URI; status: string; staged: boolean }[]): void {
+		const previousUris = new Set(this._decorationMap.keys());
+		this._decorationMap.clear();
+		const changedUris: URI[] = [];
+		for (const r of resources) {
+			const key = r.uri.toString();
+			this._decorationMap.set(key, { status: r.status, staged: r.staged });
+			previousUris.delete(key);
+			changedUris.push(r.uri);
+		}
+		for (const removedKey of previousUris) {
+			changedUris.push(URI.parse(removedKey));
+		}
+		this._onDidChange.fire(changedUris);
+	}
+
+	provideDecorations(uri: URI, _token: CancellationToken): IDecorationData | undefined {
+		const entry = this._decorationMap.get(uri.toString());
+		if (!entry) {
+			return undefined;
+		}
+		switch (entry.status) {
+			case 'modified':
+				return {
+					letter: 'M',
+					color: entry.staged ? gitDecorationStageModifiedFg : gitDecorationModifiedFg,
+					tooltip: entry.staged ? 'Index Modified' : 'Modified',
+					strikethrough: false,
+					bubble: true,
+				};
+			case 'added':
+			case 'new file':
+				return {
+					letter: 'A',
+					color: gitDecorationAddedFg,
+					tooltip: entry.staged ? 'Index Added' : 'Added',
+					strikethrough: false,
+					bubble: true,
+				};
+			case 'deleted':
+				return {
+					letter: 'D',
+					color: entry.staged ? gitDecorationStageDeletedFg : gitDecorationDeletedFg,
+					tooltip: entry.staged ? 'Index Deleted' : 'Deleted',
+					strikethrough: false,
+					bubble: false,
+				};
+			case 'renamed':
+				return {
+					letter: 'R',
+					color: gitDecorationRenamedFg,
+					tooltip: 'Index Renamed',
+					strikethrough: false,
+					bubble: true,
+				};
+			case 'untracked':
+				return {
+					letter: 'U',
+					color: gitDecorationUntrackedFg,
+					tooltip: 'Untracked',
+					strikethrough: false,
+					bubble: true,
+				};
+			case 'conflict':
+				return {
+					letter: '!',
+					color: gitDecorationConflictingFg,
+					tooltip: 'Conflict',
+					strikethrough: false,
+					bubble: true,
+				};
+			default:
+				return undefined;
+		}
+	}
+
+	dispose(): void {
+		this._onDidChange.dispose();
+	}
+}
+
 // ─── Workbench Contribution ─────────────────────────────────────────────────
 
 class TauriGitContribution extends Disposable implements IWorkbenchContribution {
@@ -669,6 +780,7 @@ class TauriGitContribution extends Disposable implements IWorkbenchContribution 
 		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
 		@ILogService private readonly logService: ILogService,
 		@IFileService private readonly fileService: IFileService,
+		@IDecorationsService private readonly decorationsService: IDecorationsService,
 	) {
 		super();
 		this._init();
@@ -735,6 +847,28 @@ class TauriGitContribution extends Disposable implements IWorkbenchContribution 
 		this._registerCommitCommand(provider, rootPath);
 
 		provider.setupHistoryProvider();
+
+		// Register git file decoration provider (letter badges: M, D, A, U, R)
+		const gitDecoProvider = new TauriGitDecorationProvider();
+		this._register(this.decorationsService.registerDecorationsProvider(gitDecoProvider));
+		this._register(gitDecoProvider);
+
+		const updateDecorations = () => {
+			const allResources: { uri: URI; status: string; staged: boolean }[] = [];
+			for (const group of provider.groups) {
+				for (const resource of group.resources) {
+					const tauriRes = resource as TauriGitResource;
+					allResources.push({
+						uri: tauriRes.sourceUri,
+						status: tauriRes.statusLabel,
+						staged: group.id === 'staged',
+					});
+				}
+			}
+			gitDecoProvider.updateResources(allResources);
+		};
+
+		provider.onDidChangeResources(updateDecorations);
 
 		await provider.refresh();
 
@@ -1046,51 +1180,89 @@ CommandsRegistry.registerCommand('tauri-git.sync', async () => {
 	}
 });
 
+CommandsRegistry.registerCommand('tauri-git.stash', async () => {
+	const path = getWorkspacePath();
+	if (!path) { return; }
+	try {
+		const invoke = await getTauriInvoke();
+		if (invoke) {
+			await invoke('git_run', { path, args: ['stash'] });
+			console.log('[TauriGit] stash complete');
+		}
+	} catch (err) {
+		console.error('[TauriGit] stash failed:', err);
+	}
+});
+
+CommandsRegistry.registerCommand('tauri-git.stashPop', async () => {
+	const path = getWorkspacePath();
+	if (!path) { return; }
+	try {
+		const invoke = await getTauriInvoke();
+		if (invoke) {
+			await invoke('git_run', { path, args: ['stash', 'pop'] });
+			console.log('[TauriGit] stash pop complete');
+		}
+	} catch (err) {
+		console.error('[TauriGit] stash pop failed:', err);
+	}
+});
+
+CommandsRegistry.registerCommand('tauri-git.stashPopLatest', async () => {
+	const path = getWorkspacePath();
+	if (!path) { return; }
+	try {
+		const invoke = await getTauriInvoke();
+		if (invoke) {
+			await invoke('git_run', { path, args: ['stash', 'pop', 'stash@{0}'] });
+			console.log('[TauriGit] stash pop latest complete');
+		}
+	} catch (err) {
+		console.error('[TauriGit] stash pop latest failed:', err);
+	}
+});
+
+CommandsRegistry.registerCommand('tauri-git.commitAmend', async () => {
+	const path = getWorkspacePath();
+	if (!path) { return; }
+	try {
+		const invoke = await getTauriInvoke();
+		if (invoke) {
+			await invoke('git_run', { path, args: ['commit', '--amend', '--no-edit'] });
+			console.log('[TauriGit] commit amend complete');
+		}
+	} catch (err) {
+		console.error('[TauriGit] commit amend failed:', err);
+	}
+});
+
+CommandsRegistry.registerCommand('tauri-git.commitAll', async () => {
+	const path = getWorkspacePath();
+	if (!path) { return; }
+	try {
+		const invoke = await getTauriInvoke();
+		if (invoke) {
+			await invoke('git_run', { path, args: ['add', '.'] });
+			const message = (window as any).__sidex_scmInputValue?.() || '';
+			if (!message.trim()) { return; }
+			await invoke('git_run', { path, args: ['commit', '-m', message] });
+			console.log('[TauriGit] commit all complete');
+		}
+	} catch (err) {
+		console.error('[TauriGit] commit all failed:', err);
+	}
+});
+
 // ─── SCM Source Control ("...") menu items ──────────────────────────────────
 
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.pull', title: 'Pull' },
-	group: '1_sync',
-	order: 1,
-});
+// Define submenus matching VS Code's Git extension
+const SCMGitCommitMenu = new MenuId('SCMGitCommit');
+const SCMGitChangesMenu = new MenuId('SCMGitChanges');
+const SCMGitPullPushMenu = new MenuId('SCMGitPullPush');
+const SCMGitBranchMenu = new MenuId('SCMGitBranch');
+const SCMGitStashMenu = new MenuId('SCMGitStash');
 
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.push', title: 'Push' },
-	group: '1_sync',
-	order: 2,
-});
-
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.fetch', title: 'Fetch' },
-	group: '1_sync',
-	order: 3,
-});
-
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.sync', title: 'Synchronize Changes', icon: ThemeIcon.fromId('sync') },
-	group: '1_sync',
-	order: 4,
-});
-
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.clone', title: 'Clone...' },
-	group: '1_sync',
-	order: 5,
-});
-
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.checkoutTo', title: 'Checkout to...' },
-	group: '4_branch',
-	order: 1,
-});
-
-MenuRegistry.appendMenuItem(MenuId.SCMSourceControlInline, {
-	command: { id: 'tauri-git.createBranch', title: 'Create Branch...' },
-	group: '4_branch',
-	order: 2,
-});
-
-// Register SCM title toolbar actions (the buttons next to "CHANGES" header)
+// Navigation toolbar buttons
 MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
 	command: { id: 'tauri-git.commit', title: 'Commit', icon: ThemeIcon.fromId('check') },
 	group: 'navigation',
@@ -1100,6 +1272,192 @@ MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
 MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
 	command: { id: 'tauri-git.refresh', title: 'Refresh', icon: ThemeIcon.fromId('refresh') },
 	group: 'navigation',
+	order: 2,
+});
+
+// Graph view toolbar buttons
+MenuRegistry.appendMenuItem(MenuId.SCMHistoryTitle, {
+	command: { id: 'tauri-git.fetch', title: 'Fetch', icon: ThemeIcon.fromId('git-fetch') },
+	group: 'navigation',
+	order: 3,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMHistoryTitle, {
+	command: { id: 'tauri-git.pull', title: 'Pull', icon: ThemeIcon.fromId('repo-pull') },
+	group: 'navigation',
+	order: 4,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMHistoryTitle, {
+	command: { id: 'tauri-git.push', title: 'Push', icon: ThemeIcon.fromId('repo-push') },
+	group: 'navigation',
+	order: 5,
+});
+
+// Quick actions (1_header group - shown directly in overflow)
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	command: { id: 'tauri-git.pull', title: 'Pull' },
+	group: '1_header',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	command: { id: 'tauri-git.push', title: 'Push' },
+	group: '1_header',
+	order: 2,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	command: { id: 'tauri-git.clone', title: 'Clone...' },
+	group: '1_header',
+	order: 3,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	command: { id: 'tauri-git.checkoutTo', title: 'Checkout to...' },
+	group: '1_header',
+	order: 4,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	command: { id: 'tauri-git.fetch', title: 'Fetch' },
+	group: '1_header',
+	order: 5,
+});
+
+// Submenus (2_main group)
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	title: 'Commit',
+	submenu: SCMGitCommitMenu,
+	group: '2_main',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	title: 'Changes',
+	submenu: SCMGitChangesMenu,
+	group: '2_main',
+	order: 2,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	title: 'Pull, Push',
+	submenu: SCMGitPullPushMenu,
+	group: '2_main',
+	order: 3,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	title: 'Branch',
+	submenu: SCMGitBranchMenu,
+	group: '2_main',
+	order: 4,
+});
+
+MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+	title: 'Stash',
+	submenu: SCMGitStashMenu,
+	group: '2_main',
+	order: 5,
+});
+
+// ─── Commit submenu items ───────────────────────────────────────────────────
+
+MenuRegistry.appendMenuItem(SCMGitCommitMenu, {
+	command: { id: 'tauri-git.commit', title: 'Commit' },
+	group: '1_commit',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitCommitMenu, {
+	command: { id: 'tauri-git.commitAll', title: 'Commit All' },
+	group: '1_commit',
+	order: 2,
+});
+
+MenuRegistry.appendMenuItem(SCMGitCommitMenu, {
+	command: { id: 'tauri-git.commitAmend', title: 'Commit (Amend)' },
+	group: '2_amend',
+	order: 1,
+});
+
+// ─── Changes submenu items ──────────────────────────────────────────────────
+
+MenuRegistry.appendMenuItem(SCMGitChangesMenu, {
+	command: { id: 'tauri-git.stageAll', title: 'Stage All Changes' },
+	group: 'changes',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitChangesMenu, {
+	command: { id: 'tauri-git.unstageAll', title: 'Unstage All Changes' },
+	group: 'changes',
+	order: 2,
+});
+
+MenuRegistry.appendMenuItem(SCMGitChangesMenu, {
+	command: { id: 'tauri-git.discardAll', title: 'Discard All Changes' },
+	group: 'changes',
+	order: 3,
+});
+
+// ─── Pull, Push submenu items ───────────────────────────────────────────────
+
+MenuRegistry.appendMenuItem(SCMGitPullPushMenu, {
+	command: { id: 'tauri-git.sync', title: 'Sync' },
+	group: '1_sync',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitPullPushMenu, {
+	command: { id: 'tauri-git.pull', title: 'Pull' },
+	group: '2_pull',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitPullPushMenu, {
+	command: { id: 'tauri-git.push', title: 'Push' },
+	group: '3_push',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitPullPushMenu, {
+	command: { id: 'tauri-git.fetch', title: 'Fetch' },
+	group: '4_fetch',
+	order: 1,
+});
+
+// ─── Branch submenu items ───────────────────────────────────────────────────
+
+MenuRegistry.appendMenuItem(SCMGitBranchMenu, {
+	command: { id: 'tauri-git.createBranch', title: 'Create Branch...' },
+	group: '1_branch',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitBranchMenu, {
+	command: { id: 'tauri-git.checkoutTo', title: 'Checkout to...' },
+	group: '1_branch',
+	order: 2,
+});
+
+// ─── Stash submenu items ────────────────────────────────────────────────────
+
+MenuRegistry.appendMenuItem(SCMGitStashMenu, {
+	command: { id: 'tauri-git.stash', title: 'Stash' },
+	group: '1_stash',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitStashMenu, {
+	command: { id: 'tauri-git.stashPopLatest', title: 'Pop Latest Stash' },
+	group: '2_pop',
+	order: 1,
+});
+
+MenuRegistry.appendMenuItem(SCMGitStashMenu, {
+	command: { id: 'tauri-git.stashPop', title: 'Pop Stash...' },
+	group: '2_pop',
 	order: 2,
 });
 
@@ -1119,7 +1477,7 @@ MenuRegistry.appendMenuItem(MenuId.SCMResourceGroupContext, {
 });
 
 MenuRegistry.appendMenuItem(MenuId.SCMResourceGroupContext, {
-	command: { id: 'tauri-git.openAllChanges', title: 'Open All Changes', icon: ThemeIcon.fromId('go-to-file') },
+	command: { id: 'tauri-git.openAllChanges', title: 'Open Changes', icon: ThemeIcon.fromId('diff-multiple') },
 	group: 'inline',
 	order: 1,
 	when: ContextKeyExpr.equals('scmResourceGroup', 'changes'),
@@ -1134,7 +1492,7 @@ MenuRegistry.appendMenuItem(MenuId.SCMResourceGroupContext, {
 });
 
 MenuRegistry.appendMenuItem(MenuId.SCMResourceGroupContext, {
-	command: { id: 'tauri-git.openAllChanges', title: 'Open All Staged Changes', icon: ThemeIcon.fromId('go-to-file') },
+	command: { id: 'tauri-git.openAllChanges', title: 'Open Staged Changes', icon: ThemeIcon.fromId('diff-multiple') },
 	group: 'inline',
 	order: 1,
 	when: ContextKeyExpr.equals('scmResourceGroup', 'staged'),
