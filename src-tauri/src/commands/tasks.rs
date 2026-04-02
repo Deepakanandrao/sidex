@@ -36,6 +36,14 @@ struct TaskExitEvent {
     exit_code: Option<i32>,
 }
 
+fn shell_quote(s: &str) -> String {
+    if cfg!(target_os = "windows") {
+        format!("\"{}\"", s.replace('`', "``").replace('"', "\"\""))
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
 /// Spawn a task process (non-PTY) and return its task_id.
 /// Output is emitted as `task-output` events, exit as `task-exit`.
 #[tauri::command]
@@ -65,7 +73,8 @@ pub fn task_spawn(
         }
 
         let full_cmd = if let Some(ref a) = args {
-            format!("{} {}", command, a.join(" "))
+            let quoted: Vec<String> = a.iter().map(|s| shell_quote(s)).collect();
+            format!("{} {}", command, quoted.join(" "))
         } else {
             command.clone()
         };

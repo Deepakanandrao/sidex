@@ -353,8 +353,22 @@ pub async fn git_show(path: String, file: String) -> Result<Vec<u8>, String> {
     }
 }
 
+const GIT_ALLOWED_SUBCOMMANDS: &[&str] = &[
+    "add", "am", "apply", "archive", "bisect", "blame", "branch", "cat-file",
+    "cherry-pick", "checkout", "clone", "commit", "describe", "diff",
+    "fetch", "for-each-ref", "format-patch", "gc", "grep", "hash-object",
+    "init", "log", "ls-files", "ls-remote", "ls-tree", "merge", "pack-refs",
+    "prune", "pull", "push", "rebase", "reflog", "remote", "reset", "revert",
+    "rev-parse", "shortlog", "show", "stash", "status", "submodule", "tag",
+    "worktree",
+];
+
 #[tauri::command]
 pub async fn git_run(path: String, args: Vec<String>) -> Result<String, String> {
+    let subcommand = args.first().map(|s| s.as_str()).unwrap_or("");
+    if !GIT_ALLOWED_SUBCOMMANDS.contains(&subcommand) {
+        return Err(format!("git subcommand '{}' is not allowed", subcommand));
+    }
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     run_git(&path, &arg_refs)
 }
