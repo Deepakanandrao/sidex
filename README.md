@@ -1,220 +1,174 @@
 # SideX
 
-A clean-room Tauri port of Visual Studio Code. Every single subsystem, service, and contribution — ported 1:1 from VSCode's architecture. Electron replaced with Tauri (Rust + native webview).
+A Tauri-based port of Visual Studio Code. Same architecture, native performance, fraction of the size.
 
-**8.5MB DMG** vs VSCode's **100MB+** download. Same architecture. Native performance.
+> **Early Release** — This project is in active development. Many features are not fully working yet. We're releasing early because a lot of people wanted to help build this out. If you're into open source and want to help make a lightweight, native code editor a reality, you're in the right place.
 
-## What is this?
+## What is SideX?
 
-SideX is a **complete 1:1 architectural replica** of VSCode, following the [Open Claw](https://github.com/instructkr/claw-code) methodology — study the original architecture, map every subsystem, and systematically port it to a new runtime.
+SideX is a 1:1 architectural port of VSCode that replaces Electron with [Tauri](https://tauri.app/) (Rust backend + native webview). The entire VSCode workbench - editor, terminal, extensions, themes, keybindings — ported to run on a native shell.
 
-- **5,677 TypeScript files** ported from VSCode's source
-- **335 CSS files** for the complete UI
-- **36 Rust files** replacing Electron's main process
-- **Zero `from 'electron'` imports** remaining in the codebase
+- **5,600+ TypeScript files** from VSCode's source, ported and adapted
+- **Rust backend** replacing Electron's main process
+- **Zero Electron imports** remaining in the codebase
+- **Lightweight** — fraction of VSCode's install size
 
-## Methodology
+## Current State
 
-Following the Open Claw approach used to port Claude Code:
+This is an early release. Here's an honest look at where things stand:
 
-1. **Studied** VSCode's architecture — 5,491 source files across 5 layers
-2. **Mapped** every subsystem: 93 platform services, 92 workbench contributions, 90 workbench services, 57 editor contributions
-3. **Mapped** all Electron API usage: 94 `electron-main/` files, 244 `electron-browser/` files, 262 `node/` files
-4. **Copied** all pure TypeScript layers directly (89% of codebase — zero Electron dependencies)
-5. **Rewrote** all 94 `electron-main/` files → Tauri window/IPC/plugin APIs
-6. **Rewrote** all 244 `electron-browser/` files → Tauri webview bridge
-7. **Rewrote** all 262 `node/` files → Tauri `invoke()` → Rust backend
-8. **Verified** zero remaining Electron imports
+**Working:**
+- Core editor (Monaco) with syntax highlighting, IntelliSense basics
+- File explorer — open folders, create/edit/delete files
+- Integrated terminal (PTY via Rust)
+- Basic Git integration
+- Theme support
+- Native menus
+- Extension loading from [Open VSX](https://open-vsx.org/)
 
-No proprietary code was generated. This is the actual VSCode source (MIT License) with the Electron runtime layer systematically replaced by Tauri.
+**In Progress / Unstable:**
+- Many workbench features are stubbed or partially implemented
+- Extension host is early-stage — not all extensions will work
+- Debugging support is scaffolded but incomplete
+- Settings/keybindings UI may have rough edges
+- Some platform services are placeholder implementations
+- Multi-window support is limited
 
-## Architecture
+We need help across the board. See [Contributing](#contributing) below.
 
-### VSCode → SideX Runtime Replacement
+## Getting Started
 
-```
-VSCode (Electron)                    SideX (Tauri)
-─────────────────                    ─────────────
-Electron Main Process (94 files)  →  Tauri Rust Backend (36 files)
-  BrowserWindow                   →  WebviewWindow
-  ipcMain/ipcRenderer             →  invoke() + listen()/emit()
-  Menu/MenuItem                   →  tauri::menu
-  dialog.*                        →  @tauri-apps/plugin-dialog
-  clipboard                       →  @tauri-apps/plugin-clipboard-manager
-  shell.openExternal              →  @tauri-apps/plugin-opener
-  Notification                    →  @tauri-apps/plugin-notification
-  safeStorage                     →  Rust keyring
-  protocol.*                      →  Tauri custom protocol
-  screen                          →  Tauri monitor API
-  net.fetch                       →  Browser fetch() API
-  powerMonitor                    →  Rust sysinfo
-  
-Renderer Process (244 files)      →  Tauri Webview (direct)
-  contextBridge/preload           →  @tauri-apps/api (no bridge needed)
-  ipcRenderer                     →  invoke() from @tauri-apps/api/core
-  webFrame                        →  CSS zoom
+### Prerequisites
 
-Node.js Layer (262 files)         →  Tauri invoke() → Rust
-  fs/fs.promises                  →  invoke('fs_*') → Rust std::fs
-  child_process                   →  invoke('process_*') → Rust Command
-  node-pty                        →  invoke('terminal_*') → portable-pty
-  @parcel/watcher                 →  invoke('fs_watch') → notify crate
-  net/http/https                  →  fetch() API / invoke() → reqwest
-  crypto                          →  Web Crypto API / invoke() → ring
-  os.*                            →  invoke('os_*') → Rust sysinfo
-  @vscode/sqlite3                 →  invoke('storage_*') → rusqlite
-  @vscode/spdlog                  →  invoke('log_*') → tracing
-```
+- [Node.js](https://nodejs.org/) 20+
+- [Rust](https://rustup.rs/) 1.77.2+
+- Platform dependencies for Tauri — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
-### VSCode Layering (Preserved 1:1)
-
-```
-┌─────────────────────────────────────────────────┐
-│  code/          Application entry (15 files)    │
-├─────────────────────────────────────────────────┤
-│  workbench/     IDE shell (3,269 files)         │
-│    ├── 92 feature contributions (contrib/)      │
-│    ├── 90 services (services/)                  │
-│    ├── 8 visual Parts (browser/parts/)          │
-│    ├── Extension host API (api/)                │
-│    └── Layout engine (browser/layout.ts)        │
-├─────────────────────────────────────────────────┤
-│  editor/        Monaco text editor (852 files)  │
-│    ├── 57 editor contributions                  │
-│    └── Standalone editor API                    │
-├─────────────────────────────────────────────────┤
-│  platform/      93 platform services (745 files)│
-│    └── DI container (instantiation/)            │
-├─────────────────────────────────────────────────┤
-│  base/          Foundation utilities (430 files)│
-│    ├── IPC layer (parts/ipc/)                   │
-│    ├── Storage (parts/storage/)                 │
-│    └── Sandbox bridge (parts/sandbox/)          │
-└─────────────────────────────────────────────────┘
-```
-
-## Rust Backend (25 Commands)
-
-Replaces Electron's main process with native Rust:
-
-| Module | Commands | Replaces |
-|---|---|---|
-| **fs** | read_file, read_file_bytes, write_file, read_dir, stat, mkdir, remove, rename, exists | Node.js `fs` |
-| **terminal** | terminal_spawn, terminal_write, terminal_resize, terminal_kill | `node-pty` |
-| **search** | search_files, search_text | ripgrep integration |
-| **window** | create_window, close_window, set_window_title, get_monitors | Electron `BrowserWindow` |
-| **os** | get_os_info, get_env, get_shell | Node.js `os` |
-| **storage** | storage_get, storage_set, storage_delete | `@vscode/sqlite3` |
-
-## File Inventory
-
-| Layer | Files | Description |
-|---|---|---|
-| `src/vs/base/` | 430 | Foundation utilities, IPC, storage, lifecycle |
-| `src/vs/platform/` | 745 | 93 platform services (DI container) |
-| `src/vs/editor/` | 852 | Monaco editor core + 57 contributions |
-| `src/vs/workbench/` | 3,269 | IDE shell, 92 features, 90 services |
-| `src/vs/code/` | 15 | Application entry points |
-| `src/vs/server/` | 23 | Server/remote support |
-| `src-tauri/src/` | 36 | Rust backend (commands, services) |
-| **CSS** | 335 | Complete VSCode UI styles |
-| **Total** | **6,719** | Complete IDE |
-
-## Build & Run
+### Development
 
 ```bash
-# Prerequisites: Node.js 20+, Rust 1.77+, Tauri CLI
+# Clone the repo
+git clone https://github.com/Sidenai/sidex.git
+cd sidex
 
 # Install dependencies
 npm install
 
-# Development (hot reload)
+# Start dev server with hot reload
 npm run tauri dev
-
-# Build release
-npm run tauri build
-
-# Output:
-# macOS: src-tauri/target/release/bundle/macos/SideX.app
-# DMG:   src-tauri/target/release/bundle/dmg/SideX_0.1.0_aarch64.dmg (8.5MB)
 ```
 
-## Project Structure
+### Production Build
+
+Building from source (not distributing pre-built binaries yet):
+
+```bash
+# Install dependencies (if not already done)
+npm install
+
+# Build the frontend (increase memory for large codebase)
+# macOS / Linux:
+NODE_OPTIONS="--max-old-space-size=12288" npm run build
+
+# Windows (PowerShell):
+$env:NODE_OPTIONS="--max-old-space-size=12288"
+npm run build
+
+# Build the Tauri app (takes 5-10 minutes)
+npx tauri build
+```
+
+## Architecture
+
+SideX preserves VSCode's layered architecture and replaces the Electron runtime with Tauri:
+
+```
+VSCode (Electron)                    SideX (Tauri)
+─────────────────                    ─────────────
+Electron Main Process            →   Tauri Rust Backend
+  BrowserWindow                  →   WebviewWindow
+  ipcMain / ipcRenderer          →   invoke() + events
+  Node.js APIs (fs, pty, etc.)   →   Rust commands (std::fs, portable-pty)
+  Menu / Dialog / Clipboard      →   Tauri plugins
+
+Renderer (DOM + TypeScript)      →   Same (runs in native webview)
+Extension Host                   →   Sidecar process (in progress)
+```
+
+### Project Structure
 
 ```
 sidex/
-├── src/                           # 6,683 frontend files
+├── src/                    # TypeScript frontend (VSCode workbench)
 │   ├── vs/
-│   │   ├── base/                  # Foundation (430 TS files)
-│   │   │   ├── common/            # Pure TS utilities
-│   │   │   ├── browser/           # DOM utilities
-│   │   │   ├── node/              # → Tauri invoke() bridge
-│   │   │   └── parts/             # IPC, storage, sandbox
-│   │   ├── platform/              # Services (745 TS files)
-│   │   │   ├── files/             # File system service
-│   │   │   ├── windows/           # Window management
-│   │   │   ├── terminal/          # Terminal service
-│   │   │   ├── configuration/     # Settings
-│   │   │   └── ... (93 total)     # All platform services
-│   │   ├── editor/                # Monaco (852 TS files)
-│   │   │   ├── common/            # Editor model, languages
-│   │   │   ├── browser/           # Editor widget
-│   │   │   ├── contrib/           # 57 contributions
-│   │   │   └── standalone/        # Standalone API
-│   │   ├── workbench/             # IDE shell (3,269 TS files)
-│   │   │   ├── browser/           # Layout, Parts, boot
-│   │   │   ├── contrib/           # 92 feature contributions
-│   │   │   ├── services/          # 90 workbench services
-│   │   │   ├── api/               # Extension host API
-│   │   │   └── electron-browser/  # → Rewritten for Tauri
-│   │   ├── code/                  # Entry points (15 files)
-│   │   └── server/                # Server support (23 files)
-│   ├── typings/                   # Type declarations
-│   ├── vscode-dts/                # VS Code API types
-│   ├── main.ts                    # Frontend entry
-│   └── styles.css                 # Theme
-├── src-tauri/                     # Rust backend (36 files)
+│   │   ├── base/           # Foundation utilities
+│   │   ├── platform/       # Platform services (DI)
+│   │   ├── editor/         # Monaco editor
+│   │   ├── workbench/      # IDE shell, features, services
+│   │   └── code/           # Application entry
+│   └── main.ts             # Frontend entry point
+├── src-tauri/              # Rust backend
 │   ├── src/
-│   │   ├── commands/              # fs, terminal, search, window, os, storage
-│   │   ├── services/              # File watcher, PTY host
-│   │   ├── lib.rs                 # Tauri app setup
-│   │   └── main.rs                # Entry point
-│   └── Cargo.toml                 # Rust dependencies
-├── port_manifest.json             # Machine-readable port status
-├── ARCHITECTURE.md                # Full architecture mapping
-└── README.md
+│   │   ├── commands/       # fs, terminal, search, git, window, etc.
+│   │   ├── lib.rs          # App setup, menu, command registration
+│   │   └── main.rs         # Entry point
+│   └── Cargo.toml
+├── index.html              # HTML shell
+├── vite.config.ts          # Vite config (port 1420)
+└── package.json
 ```
 
-## Porting Status
+For a deep dive into the architecture, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-### Electron → Tauri Replacement
+## Contributing
 
-| Layer | Files | Status |
-|---|---|---|
-| `electron-main/` | 94 | **REWRITTEN** — 0 Electron imports remain |
-| `electron-browser/` | 244 | **REWRITTEN** — Tauri preload bridge |
-| `node/` | 262 | **REWRITTEN** — invoke() → Rust backend |
-| `common/` | 1,829 | **COPIED** — pure TS, no changes needed |
-| `browser/` | 3,024 | **COPIED** — DOM only, no changes needed |
-| `worker/` | 14 | **COPIED** — Web Workers, no changes needed |
+We want your help. Seriously.
 
-### Verification
+This project was released early specifically so the community can help build it out. There's a ton of work to do — from fixing bugs to implementing entire subsystems.
 
-```
-✅ 0 files importing from 'electron'
-✅ 0 files using require('electron')
-✅ TypeScript: 0 errors (npx tsc --noEmit)
-✅ Rust: 0 errors (cargo check)
-✅ Vite build: successful
-✅ Tauri build: successful (macOS .app + .dmg)
-```
+### How to Contribute
+
+1. **Fork the repo** and create a branch for your work
+2. **Pick something** — check the [Issues](https://github.com/Sidenai/sidex/issues) tab, or just find something broken and fix it
+3. **Submit a PR** — we'll review it, and if it gets merged, you'll be added as a contributor
+
+### Areas That Need Help
+
+- **Terminal** — Shell integration, profile detection, stability
+- **Extensions** — Extension host compatibility, API coverage
+- **File System** — Watcher reliability, large file handling
+- **Editor** — IntelliSense integration, language services
+- **Debugging** — Debug adapter protocol implementation
+- **Settings** — Settings UI, keybinding editor
+- **Search** — Workspace search reliability and performance
+- **Platform** — Windows and Linux testing and fixes
+- **UI Polish** — Layout issues, theming gaps, accessibility
+
+### Dev Tips
+
+- The codebase follows VSCode's patterns — if you've worked on VSCode, you'll feel right at home
+- TypeScript imports use `.js` extensions (ES modules)
+- Services use VSCode's dependency injection with `@inject` decorators
+- Rust commands are in `src-tauri/src/commands/` — add new ones and register in `lib.rs`
+- See [AGENTS.md](./AGENTS.md) for a detailed guide to the codebase (useful for AI-assisted development too)
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | TypeScript, Vite 6, Monaco Editor, xterm.js |
+| Backend | Rust, Tauri 2, portable-pty, rusqlite, tokio |
+| Editor | Monaco (from VSCode source) |
+| Terminal | xterm.js + Rust PTY via portable-pty |
+| Extensions | Open VSX registry |
+| Storage | SQLite (via rusqlite) |
 
 ## Credits
 
-- Source architecture from [Microsoft VSCode](https://github.com/microsoft/vscode) (MIT License)
-- Porting methodology inspired by [Open Claw](https://github.com/instructkr/claw-code) by @bellman_ych
-- Built with [Tauri](https://tauri.app/) and AI-orchestrated development
+- Architecture from [Microsoft VSCode](https://github.com/microsoft/vscode) (MIT License)
+- Porting methodology inspired by [Open Claw](https://github.com/instructkr/claw-code)
+- Built with [Tauri](https://tauri.app/)
 
 ## License
 
-MIT (same as VSCode)
+MIT

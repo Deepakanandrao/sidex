@@ -189,7 +189,14 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 	private async _detectProfiles(includeDetectedProfiles?: boolean): Promise<ITerminalProfile[]> {
 		const primaryBackend = await this._terminalInstanceService.getBackend(this._environmentService.remoteAuthority);
 		if (!primaryBackend) {
-			return this._availableProfiles || [];
+			// Fallback: try local backend (Tauri has remoteAuthority=undefined)
+			const localBackend = await this._terminalInstanceService.getBackend(undefined);
+			if (!localBackend) {
+				return this._availableProfiles || [];
+			}
+			const platform = await this.getPlatformKey();
+			this._defaultProfileName = this._configurationService.getValue(`${TerminalSettingPrefix.DefaultProfile}${platform}`) ?? undefined;
+			return localBackend.getProfiles(this._configurationService.getValue(`${TerminalSettingPrefix.Profiles}${platform}`), this._defaultProfileName, includeDetectedProfiles);
 		}
 		const platform = await this.getPlatformKey();
 		this._defaultProfileName = this._configurationService.getValue(`${TerminalSettingPrefix.DefaultProfile}${platform}`) ?? undefined;

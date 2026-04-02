@@ -6,9 +6,9 @@ This document provides essential information for AI coding agents working on Sid
 
 **SideX** is a complete 1:1 architectural replica of VSCode, replacing Electron with Tauri (Rust backend + native webview). The project follows the [Open Claw](https://github.com/instructkr/claw-code) methodology — studying the original architecture, mapping every subsystem, and systematically porting to a new runtime.
 
-- **5,500+ TypeScript files** ported from VSCode's source
-- **334 CSS files** for the complete UI
-- **15 Rust files** replacing Electron's main process
+- **5,600+ TypeScript files** ported from VSCode's source
+- **335 CSS files** for the complete UI
+- **36 Rust files** replacing Electron's main process
 - **Zero `from 'electron'` imports** remaining in the codebase
 
 ## Technology Stack
@@ -37,7 +37,7 @@ This document provides essential information for AI coding agents working on Sid
 ```
 VSCode (Electron)                    SideX (Tauri)
 ─────────────────                    ─────────────
-Electron Main Process (94 files)  →  Tauri Rust Backend (15 files)
+Electron Main Process (94 files)  →  Tauri Rust Backend (36 files)
   BrowserWindow                   →  WebviewWindow
   ipcMain/ipcRenderer             →  invoke() + listen()/emit()
   Menu/MenuItem                   →  tauri::menu

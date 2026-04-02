@@ -350,17 +350,40 @@ fn home_dir_string() -> Option<String> {
 #[tauri::command]
 pub fn get_default_shell() -> String {
     if cfg!(target_os = "windows") {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| {
-            for fb in &["/bin/bash", "/bin/zsh", "/bin/sh"] {
-                if std::path::Path::new(fb).exists() {
-                    return fb.to_string();
+        return std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string());
+    }
+
+    // 1. Check $SHELL (same as VS Code: shell.ts getSystemShellUnixLike)
+    if let Ok(shell) = std::env::var("SHELL") {
+        if !shell.is_empty() && shell != "/bin/false" {
+            return shell;
+        }
+    }
+
+    // 2. Read from passwd via libc (same as VS Code: os.userInfo().shell)
+    #[cfg(unix)]
+    {
+        unsafe {
+            let uid = libc::getuid();
+            let pw = libc::getpwuid(uid);
+            if !pw.is_null() {
+                let shell_cstr = std::ffi::CStr::from_ptr((*pw).pw_shell);
+                if let Ok(s) = shell_cstr.to_str() {
+                    if !s.is_empty() && s != "/bin/false" {
+                        return s.to_string();
+                    }
                 }
             }
-            "/bin/sh".to_string()
-        })
+        }
     }
+
+    // 3. Fallback: zsh first on macOS, then bash
+    for fb in &["/bin/zsh", "/bin/bash", "/bin/sh"] {
+        if std::path::Path::new(fb).exists() {
+            return fb.to_string();
+        }
+    }
+    "/bin/sh".to_string()
 }
 
 #[tauri::command]
@@ -370,37 +393,80 @@ pub fn check_shell_exists(path: String) -> bool {
 
 #[tauri::command]
 pub fn get_available_shells() -> Vec<ShellInfo> {
-    let candidates: &[(&str, &str)] = if cfg!(target_os = "windows") {
-        &[
+    if cfg!(target_os = "windows") {
+        let candidates: &[(&str, &str)] = &[
             ("PowerShell", "powershell.exe"),
             ("PowerShell Core", "pwsh.exe"),
             ("Command Prompt", "cmd.exe"),
             ("Git Bash", "bash.exe"),
             ("WSL", "wsl.exe"),
-        ]
-    } else {
-        &[
+        ];
+        let default_shell = std::env::var("COMSPEC").unwrap_or_default();
+        let mut seen = std::collections::HashSet::new();
+        let mut shells = Vec::new();
+        for (name, path) in candidates {
+            if std::path::Path::new(path).exists() && seen.insert(name.to_string()) {
+                shells.push(ShellInfo {
+                    name: name.to_string(),
+                    path: path.to_string(),
+                    is_default: path.to_lowercase() == default_shell.to_lowercase(),
+                });
+            }
+        }
+        return shells;
+    }
+
+    let default_shell = get_default_shell();
+    let mut seen_paths = std::collections::HashSet::new();
+    let mut shells = Vec::new();
+
+    // Read /etc/shells (same as VS Code: terminalProfiles.ts detectAvailableUnixProfiles)
+    if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
+        for line in contents.lines() {
+            let trimmed = if let Some(idx) = line.find('#') {
+                &line[..idx]
+            } else {
+                line
+            };
+            let trimmed = trimmed.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let path = std::path::Path::new(trimmed);
+            if path.exists() && seen_paths.insert(trimmed.to_string()) {
+                let name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("sh")
+                    .to_string();
+                shells.push(ShellInfo {
+                    name: name.clone(),
+                    path: trimmed.to_string(),
+                    is_default: trimmed == default_shell
+                        || path.file_name().and_then(|n| n.to_str()) == std::path::Path::new(&default_shell).file_name().and_then(|n| n.to_str()),
+                });
+            }
+        }
+    }
+
+    // Fallback if /etc/shells wasn't readable
+    if shells.is_empty() {
+        let candidates: &[(&str, &str)] = &[
             ("zsh", "/bin/zsh"),
             ("bash", "/bin/bash"),
-            ("bash", "/usr/bin/bash"),
             ("fish", "/usr/bin/fish"),
             ("fish", "/usr/local/bin/fish"),
             ("fish", "/opt/homebrew/bin/fish"),
             ("sh", "/bin/sh"),
-        ]
-    };
-
-    let default_shell = std::env::var("SHELL").unwrap_or_default();
-    let mut seen_names = std::collections::HashSet::new();
-    let mut shells = Vec::new();
-
-    for (name, shell_path) in candidates {
-        if std::path::Path::new(shell_path).exists() && seen_names.insert(name.to_string()) {
-            shells.push(ShellInfo {
-                name: name.to_string(),
-                path: shell_path.to_string(),
-                is_default: *shell_path == default_shell,
-            });
+        ];
+        let mut seen_names = std::collections::HashSet::new();
+        for (name, shell_path) in candidates {
+            if std::path::Path::new(shell_path).exists() && seen_names.insert(name.to_string()) {
+                shells.push(ShellInfo {
+                    name: name.to_string(),
+                    path: shell_path.to_string(),
+                    is_default: *shell_path == default_shell,
+                });
+            }
         }
     }
 

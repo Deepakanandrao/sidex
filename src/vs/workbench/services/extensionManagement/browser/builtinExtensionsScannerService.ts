@@ -51,24 +51,19 @@ export class BuiltinExtensionsScannerService implements IBuiltinExtensionsScanne
 			if (builtinExtensionsServiceUrl) {
 				let bundledExtensions: IBundledExtension[] = [];
 
-				if (environmentService.isBuilt) {
-					// Built time configuration (do NOT modify)
-					bundledExtensions = [/*BUILD->INSERT_BUILTIN_EXTENSIONS*/];
+				// Prefer globalThis (set by builtin-extensions.js without DOM overhead)
+				if ((globalThis as any)._VSCODE_BUILTIN_EXTENSIONS) {
+					bundledExtensions = (globalThis as any)._VSCODE_BUILTIN_EXTENSIONS;
+					delete (globalThis as any)._VSCODE_BUILTIN_EXTENSIONS;
 				} else {
-					// Prefer globalThis (set by builtin-extensions.js without DOM overhead)
-					if ((globalThis as any)._VSCODE_BUILTIN_EXTENSIONS) {
-						bundledExtensions = (globalThis as any)._VSCODE_BUILTIN_EXTENSIONS;
-						delete (globalThis as any)._VSCODE_BUILTIN_EXTENSIONS;
-					} else {
-						// Fallback: check for DOM meta element
-						// eslint-disable-next-line no-restricted-syntax
-						const builtinExtensionsElement = mainWindow.document.getElementById('vscode-workbench-builtin-extensions');
-						const builtinExtensionsElementAttribute = builtinExtensionsElement ? builtinExtensionsElement.getAttribute('data-settings') : undefined;
-						if (builtinExtensionsElementAttribute) {
-							try {
-								bundledExtensions = JSON.parse(builtinExtensionsElementAttribute);
-							} catch (error) { /* ignore error*/ }
-						}
+					// Fallback: check for DOM meta element
+					// eslint-disable-next-line no-restricted-syntax
+					const builtinExtensionsElement = mainWindow.document.getElementById('vscode-workbench-builtin-extensions');
+					const builtinExtensionsElementAttribute = builtinExtensionsElement ? builtinExtensionsElement.getAttribute('data-settings') : undefined;
+					if (builtinExtensionsElementAttribute) {
+						try {
+							bundledExtensions = JSON.parse(builtinExtensionsElementAttribute);
+						} catch (error) { /* ignore error*/ }
 					}
 				}
 

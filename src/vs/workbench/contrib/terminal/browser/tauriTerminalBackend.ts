@@ -126,7 +126,6 @@ class TauriPty extends Disposable implements ITerminalChildProcess {
 
 			if (shellIntegrationEnabled && shellBasename) {
 				envToPass['VSCODE_INJECTION'] = '1';
-				envToPass['VSCODE_SHELL_INTEGRATION'] = '1';
 
 				if (shellBasename === 'zsh') {
 					try {
@@ -373,7 +372,7 @@ class TauriTerminalBackend extends Disposable implements ITerminalBackend {
 					profileName: shell.name,
 					path: shell.path,
 					isDefault: shell.is_default || shell.name === defaultName,
-					isAutoDetected: true,
+					isAutoDetected: false,
 					icon: iconMap[shell.name] || Codicon.terminal,
 				});
 			}
@@ -427,7 +426,7 @@ class TauriTerminalBackend extends Disposable implements ITerminalBackend {
 				profileName: shell.profileName,
 				path: shell.path,
 				isDefault: shell.profileName === defaultName,
-				isAutoDetected: true,
+				isAutoDetected: false,
 				icon: iconMap[shell.profileName] || Codicon.terminal,
 			});
 		}

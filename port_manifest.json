@@ -1,106 +1,71 @@
 {
   "project": "sidex",
-  "description": "Clean-room Tauri port of VSCode",
+  "version": "0.1.0",
+  "description": "Tauri port of VSCode",
   "source_reference": "microsoft/vscode (MIT License)",
   "target_platform": "tauri-v2",
   "methodology": "clean-room architectural replication",
-  "total_vscode_files": 4548,
   "layers": {
     "base": {
       "description": "Foundation utilities",
-      "vscode_files": 430,
       "sublayers": {
-        "common": { "files": 200, "strategy": "reuse", "status": "planned" },
-        "browser": { "files": 150, "strategy": "reuse", "status": "planned" },
-        "worker": { "files": 10, "strategy": "reuse", "status": "planned" },
-        "node": { "files": 50, "strategy": "rewrite-rust", "status": "planned" },
-        "parts/ipc": { "files": 15, "strategy": "rewrite-tauri", "status": "planned" },
-        "parts/storage": { "files": 5, "strategy": "rewrite-rust", "status": "planned" }
+        "common": { "strategy": "reuse", "status": "done" },
+        "browser": { "strategy": "reuse", "status": "done" },
+        "worker": { "strategy": "reuse", "status": "done" },
+        "node": { "strategy": "rewrite-rust", "status": "done" },
+        "parts/ipc": { "strategy": "rewrite-tauri", "status": "done" },
+        "parts/storage": { "strategy": "rewrite-rust", "status": "done" }
       }
     },
     "platform": {
-      "description": "93 platform services via dependency injection",
-      "vscode_files": 800,
+      "description": "Platform services via dependency injection",
       "service_count": 93,
-      "critical_services": [
-        "instantiation", "files", "windows", "configuration", "storage",
-        "keybinding", "commands", "contextkey", "theme", "log",
-        "terminal", "dialogs", "clipboard", "native", "encryption",
-        "lifecycle", "environment", "product", "request", "telemetry"
-      ],
       "strategy": "mixed-reuse-rewrite",
-      "status": "planned"
+      "status": "partial"
     },
     "editor": {
       "description": "Monaco text editor core",
-      "vscode_files": 620,
       "sublayers": {
-        "common": { "files": 200, "strategy": "reuse", "status": "planned" },
-        "browser": { "files": 100, "strategy": "reuse", "status": "planned" },
-        "contrib": { "files": 300, "strategy": "reuse", "status": "planned", "contribution_count": 57 },
-        "standalone": { "files": 20, "strategy": "reuse", "status": "planned" }
+        "common": { "strategy": "reuse", "status": "done" },
+        "browser": { "strategy": "reuse", "status": "done" },
+        "contrib": { "strategy": "reuse", "status": "done", "contribution_count": 57 },
+        "standalone": { "strategy": "reuse", "status": "done" }
       }
     },
     "workbench": {
-      "description": "IDE shell - 92 features, 90 services, 8 visual Parts",
-      "vscode_files": 3674,
+      "description": "IDE shell — features, services, visual Parts",
       "sublayers": {
-        "browser": { "files": 150, "strategy": "reuse-with-mods", "status": "planned" },
-        "common": { "files": 29, "strategy": "reuse", "status": "planned" },
-        "contrib": { "files": 2482, "strategy": "incremental-port", "status": "planned", "feature_count": 92 },
-        "services": { "files": 643, "strategy": "incremental-port", "status": "planned", "service_count": 90 },
-        "api": { "files": 299, "strategy": "port", "status": "planned" },
-        "electron-browser": { "files": 12, "strategy": "rewrite-tauri", "status": "planned" }
+        "browser": { "strategy": "reuse-with-mods", "status": "done" },
+        "common": { "strategy": "reuse", "status": "done" },
+        "contrib": { "strategy": "incremental-port", "status": "partial", "feature_count": 92 },
+        "services": { "strategy": "incremental-port", "status": "partial", "service_count": 90 },
+        "api": { "strategy": "port", "status": "in-progress" }
       }
     },
     "code": {
       "description": "Application entry point",
-      "vscode_files": 30,
       "sublayers": {
-        "electron-main": { "files": 20, "strategy": "rewrite-rust", "status": "planned" },
-        "node": { "files": 10, "strategy": "rewrite-rust", "status": "planned" }
+        "electron-main": { "strategy": "rewrite-rust", "status": "done" },
+        "electron-browser": { "strategy": "rewrite-tauri", "status": "done" }
       }
     }
   },
   "rust_backend": {
     "commands": [
       "fs::read_file", "fs::write_file", "fs::read_dir", "fs::stat", "fs::mkdir",
-      "fs::remove", "fs::rename", "fs::watch", "fs::search_files", "fs::search_text",
-      "window::create", "window::close", "window::focus", "window::set_title",
-      "dialog::open_file", "dialog::save_file", "dialog::message_box",
+      "fs::remove", "fs::rename", "fs::exists",
       "terminal::spawn", "terminal::write", "terminal::resize", "terminal::kill",
-      "process::spawn", "process::kill", "process::list",
-      "os::info", "os::env", "os::homedir",
-      "clipboard::read", "clipboard::write",
-      "crypto::hash", "crypto::encrypt", "crypto::decrypt",
-      "shell::open_external", "shell::show_in_folder",
+      "search::search_files", "search::search_text",
+      "window::create_window", "window::close_window", "window::set_window_title",
+      "os::get_os_info", "os::get_env", "os::get_shell",
       "storage::get", "storage::set", "storage::delete",
       "git::status", "git::diff", "git::log"
     ],
     "native_replacements": {
       "node-pty": "portable-pty",
       "@parcel/watcher": "notify",
-      "native-keymap": "keyboard-layout crate",
-      "@vscode/spdlog": "tracing + tracing-subscriber",
-      "electron safeStorage": "keyring crate",
-      "SQLite storage": "rusqlite"
+      "@vscode/sqlite3": "rusqlite",
+      "@vscode/spdlog": "tracing"
     }
-  },
-  "electron_api_replacements": {
-    "BrowserWindow": "tauri::WebviewWindow",
-    "ipcMain/ipcRenderer": "tauri::command + tauri::event",
-    "Menu/MenuItem": "tauri::menu",
-    "dialog": "@tauri-apps/plugin-dialog",
-    "clipboard": "@tauri-apps/plugin-clipboard-manager",
-    "shell": "@tauri-apps/plugin-opener",
-    "Notification": "@tauri-apps/plugin-notification",
-    "autoUpdater": "@tauri-apps/plugin-updater",
-    "protocol": "tauri custom protocol handler",
-    "screen": "tauri monitor API",
-    "powerMonitor": "sysinfo crate",
-    "contentTracing": "tracing crate",
-    "contextBridge": "not needed (direct @tauri-apps/api)",
-    "utilityProcess": "rust async tasks + sidecar",
-    "webContents": "tauri webview API"
   }
 }
