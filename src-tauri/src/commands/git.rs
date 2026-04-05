@@ -1,6 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+/// Create a `Command` for git with CREATE_NO_WINDOW on Windows.
+fn git_command() -> Command {
+    let mut cmd = Command::new("git");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitChange {
     pub path: String,
@@ -40,7 +51,7 @@ pub struct GitBranch {
 }
 
 fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .current_dir(path)
         .args(args)
         .output()
@@ -209,7 +220,7 @@ pub async fn git_init(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn git_is_repo(path: String) -> Result<bool, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .current_dir(&path)
         .args(["rev-parse", "--is-inside-work-tree"])
         .output()
@@ -326,7 +337,7 @@ pub async fn git_clone(url: String, path: String) -> Result<(), String> {
         return Err("git clone: path must not contain '..'".to_string());
     }
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(["clone", "--no-checkout", &url, &path])
         .output()
         .map_err(|e| format!("Failed to execute git clone: {}", e))?;
@@ -337,7 +348,7 @@ pub async fn git_clone(url: String, path: String) -> Result<(), String> {
     }
 
     // Complete checkout with hooks disabled
-    let checkout = Command::new("git")
+    let checkout = git_command()
         .current_dir(&path)
         .args(["-c", "core.hooksPath=/dev/null", "checkout"])
         .output()
@@ -363,7 +374,7 @@ pub async fn git_reset(path: String, files: Vec<String>) -> Result<(), String> {
 #[tauri::command]
 pub async fn git_show(path: String, file: String) -> Result<Vec<u8>, String> {
     let rev_file = format!("HEAD:{}", file);
-    let output = Command::new("git")
+    let output = git_command()
         .current_dir(&path)
         .args(["show", &rev_file])
         .output()
