@@ -106,7 +106,7 @@ pub fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
 #[tauri::command]
 pub fn stat(path: String) -> Result<FileStat, String> {
     validate_path(&path)?;
-    let metadata = fs::metadata(&path).map_err(|e| format!("Failed to stat '{}': {}", path, e))?;
+    let metadata = fs::symlink_metadata(&path).map_err(|e| format!("Failed to stat '{}': {}", path, e))?;
 
     let modified = metadata
         .modified()
@@ -170,6 +170,7 @@ pub fn rename(old_path: String, new_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn exists(path: String) -> bool {
-    Path::new(&path).exists()
+pub fn exists(path: String) -> Result<bool, String> {
+    validate_path(&path)?;
+    Ok(Path::new(&path).exists())
 }

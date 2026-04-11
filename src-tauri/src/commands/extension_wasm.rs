@@ -54,7 +54,8 @@ impl TsServerProcess {
             }
         }
 
-        if let Ok(out) = std::process::Command::new("which").arg("tsserver").output() {
+        let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+        if let Ok(out) = std::process::Command::new(which_cmd).arg("tsserver").output() {
             if out.status.success() {
                 let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !path.is_empty() {
@@ -327,9 +328,15 @@ impl Drop for LspServerProcess {
 
 /// Find a binary on PATH or common install locations
 fn find_binary(name: &str, extra_paths: &[&str]) -> Option<String> {
-    if let Ok(out) = std::process::Command::new("which").arg(name).output() {
+    let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    if let Ok(out) = std::process::Command::new(which_cmd).arg(name).output() {
         if out.status.success() {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let path = String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if !path.is_empty() {
                 return Some(path);
             }
@@ -433,6 +440,26 @@ struct TestRun {
 struct DocumentData {
     text: String,
     language_id: String,
+}
+
+fn uri_to_path(uri: &str) -> &str {
+    uri.strip_prefix("file://").unwrap_or(uri)
+}
+
+fn is_within_workspace(path: &str, workspace_folders: &[String]) -> bool {
+    if workspace_folders.is_empty() {
+        return true;
+    }
+    let canon = std::path::Path::new(path);
+    workspace_folders.iter().any(|folder| canon.starts_with(folder))
+}
+
+fn require_workspace_path(uri: &str, workspace_folders: &[String]) -> Result<String, String> {
+    let path = uri_to_path(uri).to_string();
+    if !is_within_workspace(&path, workspace_folders) {
+        return Err(format!("access denied: path is outside workspace"));
+    }
+    Ok(path)
 }
 
 impl WasiView for WasmHostState {
@@ -586,25 +613,25 @@ impl wit_bindings::sidex::extension::host_api::Host for WasmHostState {
     }
 
     fn read_file(&mut self, uri: String) -> Result<String, String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        std::fs::read_to_string(path).map_err(|e| {
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        std::fs::read_to_string(&path).map_err(|e| {
             log::warn!("[wasm-host] read_file failed for {path}: {e}");
             e.to_string()
         })
     }
 
     fn read_file_bytes(&mut self, uri: String) -> Result<Vec<u8>, String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        std::fs::read(path).map_err(|e| e.to_string())
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        std::fs::read(&path).map_err(|e| e.to_string())
     }
 
     fn write_file(&mut self, uri: String, content: String) -> Result<(), String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        std::fs::write(path, content).map_err(|e| e.to_string())
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        std::fs::write(&path, content).map_err(|e| e.to_string())
     }
 
     fn stat_file(&mut self, uri: String) -> Result<wit_types::FileStat, String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
+        let path = uri_to_path(&uri);
         let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
         use std::time::UNIX_EPOCH;
         let ctime = meta
@@ -635,7 +662,7 @@ impl wit_bindings::sidex::extension::host_api::Host for WasmHostState {
     }
 
     fn list_dir(&mut self, uri: String) -> Result<Vec<String>, String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
+        let path = uri_to_path(&uri);
         let entries = std::fs::read_dir(path).map_err(|e| e.to_string())?;
         Ok(entries
             .flatten()
@@ -738,8 +765,8 @@ impl wit_bindings::sidex::extension::host_api::Host for WasmHostState {
     }
     fn save_text_document(&mut self, uri: String) -> Result<bool, String> {
         if let Some(doc) = self.documents.get(&uri) {
-            let path = uri.strip_prefix("file://").unwrap_or(&uri);
-            std::fs::write(path, &doc.text).map_err(|e| e.to_string())?;
+            let path = require_workspace_path(&uri, &self.workspace_folders)?;
+            std::fs::write(&path, &doc.text).map_err(|e| e.to_string())?;
             return Ok(true);
         }
         Ok(false)
@@ -751,22 +778,28 @@ impl wit_bindings::sidex::extension::host_api::Host for WasmHostState {
     }
     fn apply_workspace_edit_entries(&mut self, entries: Vec<wit_types::WorkspaceEditEntry>) -> Result<bool, String> {
         for entry in &entries {
-            let path = entry.uri.strip_prefix("file://").unwrap_or(&entry.uri);
-            if entry.kind == wit_types::WorkspaceEditKind::CreateFile {
-                if let Some(ref opts) = entry.create_options {
-                    if !opts.overwrite && std::path::Path::new(path).exists() { continue; }
+            let path = require_workspace_path(&entry.uri, &self.workspace_folders)?;
+            match entry.kind {
+                wit_types::WorkspaceEditKind::CreateFile => {
+                    if let Some(ref opts) = entry.create_options {
+                        if !opts.overwrite && std::path::Path::new(&path).exists() { continue; }
+                    }
+                    std::fs::write(&path, "").map_err(|e| e.to_string())?;
                 }
-                std::fs::write(path, "").map_err(|e| e.to_string())?;
-            } else if entry.kind == wit_types::WorkspaceEditKind::DeleteFile {
-                if let Some(ref opts) = entry.delete_options {
-                    if opts.recursive { let _ = std::fs::remove_dir_all(path); }
-                    else { let _ = std::fs::remove_file(path); }
-                } else { let _ = std::fs::remove_file(path); }
-            } else if entry.kind == wit_types::WorkspaceEditKind::RenameFile {
-                if let Some(ref new_uri) = entry.new_uri {
-                    let new_path = new_uri.strip_prefix("file://").unwrap_or(new_uri);
-                    std::fs::rename(path, new_path).map_err(|e| e.to_string())?;
+                wit_types::WorkspaceEditKind::DeleteFile => {
+                    if entry.delete_options.as_ref().map_or(false, |o| o.recursive) {
+                        let _ = std::fs::remove_dir_all(&path);
+                    } else {
+                        let _ = std::fs::remove_file(&path);
+                    }
                 }
+                wit_types::WorkspaceEditKind::RenameFile => {
+                    if let Some(ref new_uri) = entry.new_uri {
+                        let new_path = require_workspace_path(new_uri, &self.workspace_folders)?;
+                        std::fs::rename(&path, &new_path).map_err(|e| e.to_string())?;
+                    }
+                }
+                _ => {}
             }
         }
         Ok(true)
@@ -783,32 +816,32 @@ impl wit_bindings::sidex::extension::host_api::Host for WasmHostState {
     // ── File system ──────────────────────────────────────────────────────────
 
     fn write_file_bytes(&mut self, uri: String, content: Vec<u8>) -> Result<(), String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        std::fs::write(path, content).map_err(|e| e.to_string())
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        std::fs::write(&path, content).map_err(|e| e.to_string())
     }
     fn delete_file(&mut self, uri: String, recursive: bool) -> Result<(), String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        let p = std::path::Path::new(path);
-        if p.is_dir() && recursive { std::fs::remove_dir_all(path).map_err(|e| e.to_string()) }
-        else if p.is_dir() { std::fs::remove_dir(path).map_err(|e| e.to_string()) }
-        else { std::fs::remove_file(path).map_err(|e| e.to_string()) }
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        let p = std::path::Path::new(&path);
+        if p.is_dir() && recursive { std::fs::remove_dir_all(&path).map_err(|e| e.to_string()) }
+        else if p.is_dir() { std::fs::remove_dir(&path).map_err(|e| e.to_string()) }
+        else { std::fs::remove_file(&path).map_err(|e| e.to_string()) }
     }
     fn rename_file(&mut self, old_uri: String, new_uri: String, _overwrite: bool) -> Result<(), String> {
-        let old = old_uri.strip_prefix("file://").unwrap_or(&old_uri);
-        let new = new_uri.strip_prefix("file://").unwrap_or(&new_uri);
-        std::fs::rename(old, new).map_err(|e| e.to_string())
+        let old = require_workspace_path(&old_uri, &self.workspace_folders)?;
+        let new = require_workspace_path(&new_uri, &self.workspace_folders)?;
+        std::fs::rename(&old, &new).map_err(|e| e.to_string())
     }
     fn copy_file(&mut self, source: String, dest: String, _overwrite: bool) -> Result<(), String> {
-        let s = source.strip_prefix("file://").unwrap_or(&source);
-        let d = dest.strip_prefix("file://").unwrap_or(&dest);
-        std::fs::copy(s, d).map(|_| ()).map_err(|e| e.to_string())
+        let s = require_workspace_path(&source, &self.workspace_folders)?;
+        let d = require_workspace_path(&dest, &self.workspace_folders)?;
+        std::fs::copy(&s, &d).map(|_| ()).map_err(|e| e.to_string())
     }
     fn create_directory(&mut self, uri: String) -> Result<(), String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        std::fs::create_dir_all(path).map_err(|e| e.to_string())
+        let path = require_workspace_path(&uri, &self.workspace_folders)?;
+        std::fs::create_dir_all(&path).map_err(|e| e.to_string())
     }
     fn list_dir_with_types(&mut self, uri: String) -> Result<Vec<(String, u32)>, String> {
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
+        let path = uri_to_path(&uri);
         let entries = std::fs::read_dir(path).map_err(|e| e.to_string())?;
         Ok(entries.flatten().map(|e| {
             let ft = if e.path().is_dir() { 2u32 } else if e.path().is_symlink() { 64u32 } else { 1u32 };
@@ -1557,18 +1590,17 @@ impl WasmExtensionRuntime {
                     language_id: language_id.to_string(),
                 },
             );
+            let file = uri.strip_prefix("file://").unwrap_or(uri);
             for ext in guard.extensions.values_mut() {
-                ext.store.data_mut().documents.insert(
+                let state = ext.store.data_mut();
+                state.documents.insert(
                     uri.to_string(),
                     DocumentData {
                         text: text.to_string(),
                         language_id: language_id.to_string(),
                     },
                 );
-                let state = ext.store.data_mut();
-                let file = uri.strip_prefix("file://").unwrap_or(uri);
-                if state.tsserver_open_files.contains(file) {
-                    state.tsserver_open_files.remove(file);
+                if state.tsserver_open_files.remove(file) {
                     state.ensure_file_open(file);
                 }
             }

@@ -367,8 +367,8 @@ function setupMenuActions() {
 			} else {
 				console.warn(`[SideX] Command service not ready, queuing: ${commandId}`);
 			}
-		} catch (e) {
-			console.error(`[SideX] Command ${commandId} failed:`, e);
+		} catch (err) {
+			console.error(`[SideX] Command ${commandId} failed:`, err);
 		}
 	});
 }

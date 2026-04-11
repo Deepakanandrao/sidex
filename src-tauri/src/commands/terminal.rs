@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 pub struct PtyHandle {
     writer: Box<dyn Write + Send>,
@@ -250,7 +250,7 @@ pub fn terminal_spawn(
                     return;
                 }
             };
-            if let Some(handle) = terminals.get_mut(&terminal_id) {
+            let code = if let Some(handle) = terminals.get_mut(&terminal_id) {
                 match handle.child.try_wait() {
                     Ok(Some(status)) => {
                         if status.success() {
@@ -263,7 +263,9 @@ pub fn terminal_spawn(
                 }
             } else {
                 0
-            }
+            };
+            terminals.remove(&terminal_id);
+            code
         };
 
         let _ = app.emit(

@@ -170,23 +170,27 @@ fn spawn_output_reader(
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let mut buf = [0u8; PTY_READ_BUFFER_SIZE];
+        let mut consecutive_errors = 0u32;
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => {
-                    // EOF reached
                     let _ = sender.send(OutputMessage::Shutdown);
                     break;
                 }
                 Ok(n) => {
+                    consecutive_errors = 0;
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let line = OutputLine::new(text, false);
                     if sender.send(OutputMessage::Data(line)).is_err() {
-                        // Channel closed, exit reader
                         break;
                     }
                 }
                 Err(e) => {
-                    // Read error, send error message
+                    consecutive_errors += 1;
+                    if consecutive_errors > 5 {
+                        let _ = sender.send(OutputMessage::Shutdown);
+                        break;
+                    }
                     let error_text = format!("\r\n[Terminal read error: {}]\r\n", e);
                     let _ = sender.send(OutputMessage::Data(OutputLine::new(error_text, true)));
                     std::thread::sleep(Duration::from_millis(100));
@@ -882,29 +886,37 @@ pub async fn exec(
         .spawn()
         .map_err(|e| format!("Failed to spawn '{}': {}", command, e))?;
 
-    // Wait with timeout
+    let stdout_handle = child.stdout.take();
+    let stderr_handle = child.stderr.take();
+
+    let stdout_task = tokio::spawn(async move {
+        if let Some(mut stdout) = stdout_handle {
+            let mut buf = String::new();
+            use tokio::io::AsyncReadExt;
+            let _ = stdout.read_to_string(&mut buf).await;
+            buf
+        } else {
+            String::new()
+        }
+    });
+
+    let stderr_task = tokio::spawn(async move {
+        if let Some(mut stderr) = stderr_handle {
+            let mut buf = String::new();
+            use tokio::io::AsyncReadExt;
+            let _ = stderr.read_to_string(&mut buf).await;
+            buf
+        } else {
+            String::new()
+        }
+    });
+
     let result = timeout(timeout_duration, child.wait()).await;
 
     match result {
         Ok(Ok(status)) => {
-            // Process completed
-            let stdout = if let Some(mut stdout) = child.stdout.take() {
-                let mut buf = String::new();
-                use tokio::io::AsyncReadExt;
-                let _ = stdout.read_to_string(&mut buf).await;
-                buf
-            } else {
-                String::new()
-            };
-
-            let stderr = if let Some(mut stderr) = child.stderr.take() {
-                let mut buf = String::new();
-                use tokio::io::AsyncReadExt;
-                let _ = stderr.read_to_string(&mut buf).await;
-                buf
-            } else {
-                String::new()
-            };
+            let stdout = stdout_task.await.unwrap_or_default();
+            let stderr = stderr_task.await.unwrap_or_default();
 
             Ok(ExecResult {
                 stdout,
@@ -914,31 +926,13 @@ pub async fn exec(
             })
         }
         Ok(Err(e)) => {
-            // Process error
             Err(format!("Process error: {}", e))
         }
         Err(_) => {
-            // Timeout - kill the process
             let _ = child.kill().await;
 
-            // Try to get any output before killing
-            let stdout = if let Some(mut stdout) = child.stdout.take() {
-                let mut buf = String::new();
-                use tokio::io::AsyncReadExt;
-                let _ = stdout.read_to_string(&mut buf).await;
-                buf
-            } else {
-                String::new()
-            };
-
-            let stderr = if let Some(mut stderr) = child.stderr.take() {
-                let mut buf = String::new();
-                use tokio::io::AsyncReadExt;
-                let _ = stderr.read_to_string(&mut buf).await;
-                buf
-            } else {
-                String::new()
-            };
+            let stdout = stdout_task.await.unwrap_or_default();
+            let stderr = stderr_task.await.unwrap_or_default();
 
             Ok(ExecResult {
                 stdout,
@@ -971,6 +965,7 @@ pub fn term_clear_buffer(
     Ok(())
 }
 
+#[cfg(unix)]
 const ALLOWED_SIGNALS: &[i32] = &[
     2,  // SIGINT
     9,  // SIGKILL

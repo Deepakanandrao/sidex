@@ -304,24 +304,30 @@ pub fn search_text(
         };
 
         let path_str = entry.path().to_string_lossy().to_string();
+        let mut local_matches = Vec::new();
 
         for (line_idx, line) in content.lines().enumerate() {
-            let mut r = results.lock().unwrap();
-            if r.len() >= max_results {
-                break;
-            }
             for m in re.find_iter(line) {
-                r.push(TextMatch {
+                local_matches.push(TextMatch {
                     path: path_str.clone(),
                     line_number: line_idx + 1,
                     line_content: line.to_string(),
                     column: m.start(),
                     match_length: m.end() - m.start(),
                 });
-                if r.len() >= max_results {
+                if local_matches.len() >= max_results {
                     break;
                 }
             }
+            if local_matches.len() >= max_results {
+                break;
+            }
+        }
+
+        if !local_matches.is_empty() {
+            let mut r = results.lock().unwrap();
+            let remaining = max_results.saturating_sub(r.len());
+            r.extend(local_matches.into_iter().take(remaining));
         }
     });
 

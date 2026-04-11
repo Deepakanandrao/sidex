@@ -159,13 +159,9 @@ impl InvertedIndex {
 
     /// Get or create file ID for a path
     fn get_or_create_file_id(&self, path: &str) -> u32 {
-        if let Some(id) = self.path_to_id.get(path) {
-            *id
-        } else {
-            let new_id = self.next_file_id.fetch_add(1, Ordering::SeqCst);
-            self.path_to_id.insert(path.to_string(), new_id);
-            new_id
-        }
+        *self.path_to_id.entry(path.to_string()).or_insert_with(|| {
+            self.next_file_id.fetch_add(1, Ordering::SeqCst)
+        })
     }
 
     /// Add a word to the trigram index
@@ -609,27 +605,24 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
 /// Check if a file is binary by looking for null bytes in the first N bytes
 fn is_binary_file(path: &Path) -> Result<bool, String> {
-    let content = fs::read(path).map_err(|e| e.to_string())?;
-    let check_len = content.len().min(BINARY_CHECK_BYTES);
-
-    for i in 0..check_len {
-        if content[i] == 0 {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buf = [0u8; BINARY_CHECK_BYTES];
+    let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+    Ok(buf[..n].contains(&0))
 }
 
 /// Get the content of a specific line from a file
 fn get_line_at(path: &str, line_number: usize) -> Result<String, String> {
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-
-    content
+    use std::io::BufRead;
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let reader = std::io::BufReader::new(file);
+    let target = line_number.saturating_sub(1);
+    reader
         .lines()
-        .nth(line_number.saturating_sub(1))
-        .map(|s| s.to_string())
-        .ok_or_else(|| "Line not found".to_string())
+        .nth(target)
+        .ok_or_else(|| "Line not found".to_string())?
+        .map_err(|e| e.to_string())
 }
 
 /// Collect all files to index in a directory
