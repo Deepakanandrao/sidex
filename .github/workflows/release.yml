@@ -246,10 +246,8 @@ jobs:
 
           MACOS_SIG=$(cat all-artifacts/*.app.tar.gz.sig 2>/dev/null | head -1 || echo "")
           MACOS_FILE=$(ls all-artifacts/*.app.tar.gz 2>/dev/null | head -1 | xargs basename || echo "")
-
           WIN_SIG=$(cat all-artifacts/*-setup.exe.zip.sig 2>/dev/null | head -1 || echo "")
           WIN_FILE=$(ls all-artifacts/*-setup.exe.zip 2>/dev/null | head -1 | xargs basename || echo "")
-
           LINUX_SIG=$(cat all-artifacts/*.AppImage.tar.gz.sig 2>/dev/null | head -1 || echo "")
           LINUX_FILE=$(ls all-artifacts/*.AppImage.tar.gz 2>/dev/null | head -1 | xargs basename || echo "")
 
