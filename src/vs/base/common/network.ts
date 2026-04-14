@@ -307,6 +307,14 @@ class FileAccessImpl {
 			return RemoteAuthorities.rewrite(uri);
 		}
 
+		// SideX Tauri: convert file:// URIs via Tauri's asset protocol
+		if (uri.scheme === Schemas.file && (globalThis as any).__SIDEX_TAURI__) {
+			const internals = (window as any).__TAURI_INTERNALS__;
+			if (internals?.convertFileSrc) {
+				return URI.parse(internals.convertFileSrc(uri.fsPath));
+			}
+		}
+
 		// Convert to `vscode-file` resource..
 		if (
 			// ...only ever for `file` resources

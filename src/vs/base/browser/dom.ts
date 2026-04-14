@@ -1606,12 +1606,10 @@ export function computeScreenAwareSize(window: Window, cssPx: number): number {
  * See https://mathiasbynens.github.io/rel-noopener/
  */
 export function windowOpenNoOpener(url: string): void {
-	// By using 'noopener' in the `windowFeatures` argument, the newly created window will
-	// not be able to use `window.opener` to reach back to the current page.
-	// See https://stackoverflow.com/a/46958731
-	// See https://developer.mozilla.org/en-US/docs/Web/API/Window/open#noopener
-	// However, this also doesn't allow us to realize if the browser blocked
-	// the creation of the window.
+	if ((globalThis as any).__SIDEX_TAURI__ && (globalThis as any).__sidex_shellOpen) {
+		(globalThis as any).__sidex_shellOpen(url);
+		return;
+	}
 	mainWindow.open(url, '_blank', 'noopener');
 }
 

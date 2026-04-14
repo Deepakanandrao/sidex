@@ -1,3 +1,5 @@
+use base64::Engine as _;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -9,9 +11,12 @@ const ALLOWED_HOSTS: &[&str] = &[
     "open-vsx.org",
     "openvsx.eclipsecontent.org",
     "marketplace.visualstudio.com",
+    "az764295.vo.msecnd.net",
+    "vscode-unpkg.net",
     "github.com",
     "raw.githubusercontent.com",
     "objects.githubusercontent.com",
+    "update.code.visualstudio.com",
 ];
 
 fn validate_url(url: &str) -> Result<reqwest::Url, String> {
@@ -164,4 +169,70 @@ pub async fn proxy_request(
 
     let bytes = read_body_limited(response).await?;
     String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in proxy response: {}", e))
+}
+
+#[derive(Serialize)]
+pub struct ProxyResponse {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body_b64: String,
+}
+
+#[tauri::command]
+pub async fn proxy_request_full(
+    url: String,
+    method: String,
+    headers: HashMap<String, String>,
+    body: Option<String>,
+) -> Result<ProxyResponse, String> {
+    let parsed = validate_url(&url)?;
+    if !is_host_allowed(&parsed) {
+        return Err(format!(
+            "proxy requests to '{}' are not allowed",
+            parsed.host_str().unwrap_or("unknown")
+        ));
+    }
+
+    let client = build_client()?;
+
+    let mut req = match method.to_uppercase().as_str() {
+        "POST" => client.post(parsed),
+        "PUT" => client.put(parsed),
+        "DELETE" => client.delete(parsed),
+        "PATCH" => client.patch(parsed),
+        _ => client.get(parsed),
+    };
+
+    for (key, value) in &headers {
+        if key.to_ascii_lowercase() == "accept-encoding" {
+            continue;
+        }
+        req = req.header(key.as_str(), value.as_str());
+    }
+
+    if let Some(b) = body {
+        req = req.body(b);
+    }
+
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("proxy request failed: {}", e))?;
+
+    let status = response.status().as_u16();
+    let mut resp_headers: HashMap<String, String> = HashMap::new();
+    for (k, v) in response.headers() {
+        if let Ok(v_str) = v.to_str() {
+            resp_headers.insert(k.to_string(), v_str.to_string());
+        }
+    }
+
+    let bytes = read_body_limited(response).await?;
+    let body_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+    Ok(ProxyResponse {
+        status,
+        headers: resp_headers,
+        body_b64,
+    })
 }

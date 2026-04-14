@@ -4,7 +4,7 @@ use crate::commands::extension_platform::{
 };
 use serde::Serialize;
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{Read, Cursor};
 use std::path::Path;
 use tauri::AppHandle;
 
@@ -62,6 +62,11 @@ pub async fn install_extension(vsix_path: String) -> Result<InstalledExtension, 
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("read {rel}: {e}"))?;
             fs::write(&target, &buf).map_err(|e| format!("write {rel}: {e}"))?;
+            #[cfg(unix)]
+            if entry.unix_mode().map_or(false, |m| m & 0o111 != 0) || rel.starts_with("bin/") {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).ok();
+            }
         }
     }
 
@@ -73,6 +78,58 @@ pub async fn install_extension(vsix_path: String) -> Result<InstalledExtension, 
         version: manifest.version,
         path: ext_dir.to_string_lossy().to_string(),
     })
+}
+
+fn extract_vsix_bytes(data: &[u8]) -> Result<InstalledExtension, String> {
+    let cursor = Cursor::new(data);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("bad vsix: {e}"))?;
+    let manifest = read_vsix_manifest(&mut archive)?;
+    let safe_id = sanitize_ext_id(&manifest.id)?;
+    let ext_dir = user_extensions_dir().join(&safe_id);
+    if ext_dir.exists() {
+        fs::remove_dir_all(&ext_dir).map_err(|e| format!("cleanup: {e}"))?;
+    }
+    fs::create_dir_all(&ext_dir).map_err(|e| format!("mkdir: {e}"))?;
+    let prefix = "extension/";
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| format!("entry: {e}"))?;
+        let raw_name = entry.name().to_string();
+        if !raw_name.starts_with(prefix) { continue; }
+        let rel = &raw_name[prefix.len()..];
+        if rel.is_empty() || rel.contains("..") { continue; }
+        let target = ext_dir.join(rel);
+        if entry.is_dir() {
+            fs::create_dir_all(&target).map_err(|e| format!("mkdir {rel}: {e}"))?;
+        } else {
+            if let Some(parent) = target.parent() { fs::create_dir_all(parent).ok(); }
+            let mut buf = Vec::with_capacity(entry.size() as usize);
+            entry.read_to_end(&mut buf).map_err(|e| format!("read {rel}: {e}"))?;
+            fs::write(&target, &buf).map_err(|e| format!("write {rel}: {e}"))?;
+            #[cfg(unix)]
+            if entry.unix_mode().map_or(false, |m| m & 0o111 != 0) || rel.starts_with("bin/") {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).ok();
+            }
+        }
+    }
+    log::info!("installed extension {} to {}", safe_id, ext_dir.display());
+    Ok(InstalledExtension {
+        id: safe_id,
+        name: manifest.name,
+        version: manifest.version,
+        path: ext_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn install_extension_from_url(url: String) -> Result<InstalledExtension, String> {
+    log::info!("downloading extension from {url}");
+    let resp = reqwest::get(&url).await.map_err(|e| format!("download: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("download failed: HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("read body: {e}"))?;
+    extract_vsix_bytes(&bytes)
 }
 
 #[tauri::command]

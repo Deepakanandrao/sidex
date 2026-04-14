@@ -193,22 +193,9 @@ async function boot() {
 
 function setupTauriExternalOpener() {
 	import('@tauri-apps/plugin-shell').then(shell => {
-		const origOpen = window.open.bind(window);
 		(window as any).__sidex_shellOpen = (url: string) => {
-			shell.open(url).catch(() => origOpen(url, '_blank'));
+			shell.open(url).catch(() => {});
 		};
-
-		const handler = (e: MouseEvent) => {
-			const target = (e.target as HTMLElement)?.closest?.('a');
-			if (!target) { return; }
-			const href = target.getAttribute('href') || target.dataset?.href;
-			if (href && (href.startsWith('mailto:') || href.startsWith('http://') || href.startsWith('https://'))) {
-				e.preventDefault();
-				e.stopPropagation();
-				shell.open(href).catch(() => {});
-			}
-		};
-		document.addEventListener('click', handler, true);
 	}).catch(() => {});
 }
 
@@ -244,6 +231,9 @@ function setupNativeWindowDragging() {
 			return;
 		}
 		if (target.closest('a, button, input, select, textarea, .action-item, .command-center, .window-controls-container')) {
+			return;
+		}
+		if (target.closest('[draggable="true"]') || target.getAttribute('draggable') === 'true') {
 			return;
 		}
 		appWindow.startDragging().catch(() => {});

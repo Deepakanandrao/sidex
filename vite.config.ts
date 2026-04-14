@@ -21,7 +21,7 @@ export default defineConfig({
     },
   },
   build: {
-    target: ['es2022', 'chrome100'],
+    target: ['es2022', 'chrome100', 'safari15'],
     minify: 'esbuild',
     sourcemap: false,
     chunkSizeWarningLimit: 25000,

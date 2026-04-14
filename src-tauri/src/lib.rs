@@ -423,6 +423,12 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            #[cfg(feature = "devtools")]
+            if let Some(window) = app.get_webview_window("main") {
+                window.open_devtools();
+            }
+
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -553,6 +559,12 @@ pub fn run() {
             commands::fetch_url,
             commands::fetch_url_text,
             commands::proxy_request,
+            commands::proxy_request_full,
+            commands::clipboard_read_text,
+            commands::clipboard_write_text,
+            commands::open_external_url,
+            commands::env_shell,
+            commands::env_app_host,
             commands::debug_spawn_adapter,
             commands::debug_send,
             commands::debug_kill,
@@ -568,6 +580,7 @@ pub fn run() {
             commands::watch_is_active,
             // Extensions
             commands::install_extension,
+            commands::install_extension_from_url,
             commands::uninstall_extension,
             commands::list_installed_extensions,
             commands::list_available_extensions,

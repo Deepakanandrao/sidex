@@ -22,7 +22,7 @@ export const webviewResourceBaseHost = 'vscode-cdn.net';
 
 export const webviewRootResourceAuthority = `vscode-resource.${webviewResourceBaseHost}`;
 
-export const webviewGenericCspSource = `'self' https://*.${webviewResourceBaseHost}` + ((globalThis as any).__SIDEX_TAURI__ ? ' tauri:' : '');
+export const webviewGenericCspSource = `'self' https://*.${webviewResourceBaseHost}` + ((globalThis as any).__SIDEX_TAURI__ ? ' tauri: https://tauri.localhost https://*.tauri.localhost asset:' : '');
 
 /**
  * Construct a uri that can load resources inside a webview

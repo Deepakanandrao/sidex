@@ -303,7 +303,15 @@ export async function fetchZshHistory(accessor: ServicesAccessor): Promise<IShel
 		return undefined;
 	}
 	const isExtendedHistory = /^:\s\d+:\d+;/.test(resolvedFile.content);
-	const fileLines = resolvedFile.content.split(isExtendedHistory ? /\:\s\d+\:\d+;/ : /(?<!\\)\n/);
+	const fileLines = isExtendedHistory
+		? resolvedFile.content.split(/\:\s\d+\:\d+;/)
+		: resolvedFile.content.split('\n').reduce<string[]>((acc, line, i) => {
+			if (i === 0) { acc.push(line); return acc; }
+			const prev = acc[acc.length - 1];
+			if (prev.endsWith('\\')) { acc[acc.length - 1] = prev.slice(0, -1) + '\n' + line; }
+			else { acc.push(line); }
+			return acc;
+		}, []);
 	const result: Set<string> = new Set();
 	for (let i = 0; i < fileLines.length; i++) {
 		const sanitized = fileLines[i].replace(/\\\n/g, '\n').trim();

@@ -10145,6 +10145,135 @@
     }
   },
   {
+    "extensionPath": "latex",
+    "packageJSON": {
+      "name": "latex",
+      "displayName": "%displayName%",
+      "description": "%description%",
+      "version": "10.0.0",
+      "publisher": "vscode",
+      "license": "MIT",
+      "engines": {
+        "vscode": "*"
+      },
+      "scripts": {
+        "update-grammar": "node ./build/update-grammars.js"
+      },
+      "categories": [
+        "Programming Languages"
+      ],
+      "contributes": {
+        "languages": [
+          {
+            "id": "tex",
+            "aliases": [
+              "TeX",
+              "tex"
+            ],
+            "extensions": [
+              ".sty",
+              ".cls",
+              ".bbx",
+              ".cbx"
+            ],
+            "configuration": "latex-language-configuration.json"
+          },
+          {
+            "id": "latex",
+            "aliases": [
+              "LaTeX",
+              "latex"
+            ],
+            "extensions": [
+              ".tex",
+              ".ltx",
+              ".ctx"
+            ],
+            "configuration": "latex-language-configuration.json"
+          },
+          {
+            "id": "bibtex",
+            "aliases": [
+              "BibTeX",
+              "bibtex"
+            ],
+            "extensions": [
+              ".bib"
+            ]
+          },
+          {
+            "id": "cpp_embedded_latex",
+            "configuration": "latex-cpp-embedded-language-configuration.json",
+            "aliases": []
+          },
+          {
+            "id": "markdown_latex_combined",
+            "configuration": "markdown-latex-combined-language-configuration.json",
+            "aliases": []
+          }
+        ],
+        "grammars": [
+          {
+            "language": "tex",
+            "scopeName": "text.tex",
+            "path": "./syntaxes/TeX.tmLanguage.json",
+            "unbalancedBracketScopes": [
+              "keyword.control.ifnextchar.tex",
+              "punctuation.math.operator.tex"
+            ]
+          },
+          {
+            "language": "latex",
+            "scopeName": "text.tex.latex",
+            "path": "./syntaxes/LaTeX.tmLanguage.json",
+            "unbalancedBracketScopes": [
+              "keyword.control.ifnextchar.tex",
+              "punctuation.math.operator.tex"
+            ],
+            "embeddedLanguages": {
+              "source.cpp": "cpp_embedded_latex",
+              "source.css": "css",
+              "text.html": "html",
+              "source.java": "java",
+              "source.js": "javascript",
+              "source.julia": "julia",
+              "source.lua": "lua",
+              "source.python": "python",
+              "source.ruby": "ruby",
+              "source.ts": "typescript",
+              "text.xml": "xml",
+              "source.yaml": "yaml",
+              "meta.embedded.markdown_latex_combined": "markdown_latex_combined"
+            }
+          },
+          {
+            "language": "bibtex",
+            "scopeName": "text.bibtex",
+            "path": "./syntaxes/Bibtex.tmLanguage.json"
+          },
+          {
+            "language": "markdown_latex_combined",
+            "scopeName": "text.tex.markdown_latex_combined",
+            "path": "./syntaxes/markdown-latex-combined.tmLanguage.json"
+          },
+          {
+            "language": "cpp_embedded_latex",
+            "scopeName": "source.cpp.embedded.latex",
+            "path": "./syntaxes/cpp-grammar-bailout.tmLanguage.json"
+          }
+        ]
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/microsoft/vscode.git"
+      }
+    },
+    "packageNLS": {
+      "displayName": "LaTeX Language Basics",
+      "description": "Provides syntax highlighting and bracket matching for TeX, LaTeX and BibTeX."
+    }
+  },
+  {
     "extensionPath": "less",
     "packageJSON": {
       "name": "less",
@@ -11602,7 +11731,38 @@
             }
           }
         },
-        "customEditors": [],
+        "customEditors": [
+          {
+            "viewType": "imagePreview.previewEditor",
+            "displayName": "%customEditor.imagePreview.displayName%",
+            "priority": "builtin",
+            "selector": [
+              {
+                "filenamePattern": "*.{jpg,jpe,jpeg,png,bmp,gif,ico,webp,avif,svg}"
+              }
+            ]
+          },
+          {
+            "viewType": "vscode.audioPreview",
+            "displayName": "%customEditor.audioPreview.displayName%",
+            "priority": "builtin",
+            "selector": [
+              {
+                "filenamePattern": "*.{mp3,wav,ogg,oga}"
+              }
+            ]
+          },
+          {
+            "viewType": "vscode.videoPreview",
+            "displayName": "%customEditor.videoPreview.displayName%",
+            "priority": "builtin",
+            "selector": [
+              {
+                "filenamePattern": "*.{mp4,webm}"
+              }
+            ]
+          }
+        ],
         "commands": [
           {
             "command": "imagePreview.zoomIn",
@@ -12808,6 +12968,246 @@
     }
   },
   {
+    "extensionPath": "prompt-basics",
+    "packageJSON": {
+      "name": "prompt",
+      "displayName": "%displayName%",
+      "description": "%description%",
+      "version": "10.0.0",
+      "publisher": "vscode",
+      "license": "MIT",
+      "engines": {
+        "vscode": "^1.20.0"
+      },
+      "categories": [
+        "Programming Languages"
+      ],
+      "contributes": {
+        "languages": [
+          {
+            "id": "prompt",
+            "aliases": [
+              "Prompt",
+              "prompt"
+            ],
+            "extensions": [
+              ".prompt.md"
+            ],
+            "configuration": "./language-configuration.json"
+          },
+          {
+            "id": "instructions",
+            "aliases": [
+              "Instructions",
+              "instructions"
+            ],
+            "extensions": [
+              ".instructions.md",
+              "copilot-instructions.md"
+            ],
+            "filenamePatterns": [
+              "**/.claude/rules/**/*.md"
+            ],
+            "configuration": "./language-configuration.json"
+          },
+          {
+            "id": "chatagent",
+            "aliases": [
+              "Agent",
+              "chat agent"
+            ],
+            "extensions": [
+              ".agent.md",
+              ".chatmode.md"
+            ],
+            "filenamePatterns": [
+              "**/.github/agents/*.md",
+              "**/.claude/agents/*.md"
+            ],
+            "configuration": "./language-configuration.json"
+          },
+          {
+            "id": "skill",
+            "aliases": [
+              "Skill",
+              "skill"
+            ],
+            "filenames": [
+              "SKILL.md"
+            ],
+            "configuration": "./language-configuration.json"
+          }
+        ],
+        "grammars": [
+          {
+            "language": "prompt",
+            "path": "./syntaxes/prompt.tmLanguage.json",
+            "scopeName": "text.html.markdown.prompt",
+            "unbalancedBracketScopes": [
+              "markup.underline.link.markdown",
+              "punctuation.definition.list.begin.markdown"
+            ]
+          },
+          {
+            "language": "instructions",
+            "path": "./syntaxes/prompt.tmLanguage.json",
+            "scopeName": "text.html.markdown.prompt",
+            "unbalancedBracketScopes": [
+              "markup.underline.link.markdown",
+              "punctuation.definition.list.begin.markdown"
+            ]
+          },
+          {
+            "language": "chatagent",
+            "path": "./syntaxes/prompt.tmLanguage.json",
+            "scopeName": "text.html.markdown.prompt",
+            "unbalancedBracketScopes": [
+              "markup.underline.link.markdown",
+              "punctuation.definition.list.begin.markdown"
+            ]
+          },
+          {
+            "language": "skill",
+            "path": "./syntaxes/prompt.tmLanguage.json",
+            "scopeName": "text.html.markdown.prompt",
+            "unbalancedBracketScopes": [
+              "markup.underline.link.markdown",
+              "punctuation.definition.list.begin.markdown"
+            ]
+          }
+        ],
+        "configurationDefaults": {
+          "[prompt]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 2,
+            "editor.autoIndent": "advanced",
+            "editor.unicodeHighlight.ambiguousCharacters": false,
+            "editor.unicodeHighlight.invisibleCharacters": false,
+            "diffEditor.ignoreTrimWhitespace": false,
+            "editor.wordWrap": "on",
+            "editor.quickSuggestions": {
+              "comments": "off",
+              "strings": "on",
+              "other": "on"
+            },
+            "editor.wordBasedSuggestions": "off"
+          },
+          "[instructions]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 2,
+            "editor.autoIndent": "advanced",
+            "editor.unicodeHighlight.ambiguousCharacters": false,
+            "editor.unicodeHighlight.invisibleCharacters": false,
+            "diffEditor.ignoreTrimWhitespace": false,
+            "editor.wordWrap": "on",
+            "editor.quickSuggestions": {
+              "comments": "off",
+              "strings": "on",
+              "other": "on"
+            },
+            "editor.wordBasedSuggestions": "off"
+          },
+          "[chatagent]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 2,
+            "editor.autoIndent": "advanced",
+            "editor.unicodeHighlight.ambiguousCharacters": false,
+            "editor.unicodeHighlight.invisibleCharacters": false,
+            "diffEditor.ignoreTrimWhitespace": false,
+            "editor.wordWrap": "on",
+            "editor.quickSuggestions": {
+              "comments": "off",
+              "strings": "on",
+              "other": "on"
+            },
+            "editor.wordBasedSuggestions": "off"
+          },
+          "[skill]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 2,
+            "editor.autoIndent": "advanced",
+            "editor.unicodeHighlight.ambiguousCharacters": false,
+            "editor.unicodeHighlight.invisibleCharacters": false,
+            "diffEditor.ignoreTrimWhitespace": false,
+            "editor.wordWrap": "on",
+            "editor.quickSuggestions": {
+              "comments": "off",
+              "strings": "on",
+              "other": "on"
+            },
+            "editor.wordBasedSuggestions": "off"
+          }
+        }
+      },
+      "scripts": {},
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/microsoft/vscode.git"
+      }
+    },
+    "packageNLS": {
+      "displayName": "Prompt Language Basics",
+      "description": "Syntax highlighting for Prompt and Instructions documents."
+    }
+  },
+  {
+    "extensionPath": "pug",
+    "packageJSON": {
+      "name": "pug",
+      "displayName": "%displayName%",
+      "description": "%description%",
+      "version": "10.0.0",
+      "publisher": "vscode",
+      "license": "MIT",
+      "engines": {
+        "vscode": "*"
+      },
+      "scripts": {
+        "update-grammar": "node ../node_modules/vscode-grammar-updater/bin davidrios/pug-tmbundle Syntaxes/Pug.JSON-tmLanguage ./syntaxes/pug.tmLanguage.json"
+      },
+      "categories": [
+        "Programming Languages"
+      ],
+      "contributes": {
+        "languages": [
+          {
+            "id": "jade",
+            "extensions": [
+              ".pug",
+              ".jade"
+            ],
+            "aliases": [
+              "Pug",
+              "Jade",
+              "jade"
+            ],
+            "configuration": "./language-configuration.json"
+          }
+        ],
+        "grammars": [
+          {
+            "language": "jade",
+            "scopeName": "text.pug",
+            "path": "./syntaxes/pug.tmLanguage.json"
+          }
+        ],
+        "configurationDefaults": {
+          "[jade]": {
+            "diffEditor.ignoreTrimWhitespace": false
+          }
+        }
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/microsoft/vscode.git"
+      }
+    },
+    "packageNLS": {
+      "displayName": "Pug Language Basics",
+      "description": "Provides syntax highlighting and bracket matching in Pug files."
+    }
+  },
+  {
     "extensionPath": "python",
     "packageJSON": {
       "name": "python",
@@ -13432,6 +13832,55 @@
       "cmd.references-view.showSupertypes": "Show Supertypes",
       "cmd.references-view.showSubtypes": "Show Subtypes",
       "cmd.references-view.removeTypeItem": "Dismiss"
+    }
+  },
+  {
+    "extensionPath": "restructuredtext",
+    "packageJSON": {
+      "name": "restructuredtext",
+      "displayName": "%displayName%",
+      "description": "%description%",
+      "version": "10.0.0",
+      "publisher": "vscode",
+      "license": "MIT",
+      "engines": {
+        "vscode": "*"
+      },
+      "scripts": {
+        "update-grammar": "node ../node_modules/vscode-grammar-updater/bin trond-snekvik/vscode-rst syntaxes/rst.tmLanguage.json ./syntaxes/rst.tmLanguage.json"
+      },
+      "categories": [
+        "Programming Languages"
+      ],
+      "contributes": {
+        "languages": [
+          {
+            "id": "restructuredtext",
+            "aliases": [
+              "reStructuredText"
+            ],
+            "configuration": "./language-configuration.json",
+            "extensions": [
+              ".rst"
+            ]
+          }
+        ],
+        "grammars": [
+          {
+            "language": "restructuredtext",
+            "scopeName": "source.rst",
+            "path": "./syntaxes/rst.tmLanguage.json"
+          }
+        ]
+      },
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/microsoft/vscode.git"
+      }
+    },
+    "packageNLS": {
+      "displayName": "reStructuredText Language Basics",
+      "description": "Provides syntax highlighting in reStructuredText files."
     }
   },
   {

@@ -271,13 +271,20 @@ export class TerminalCompletionService extends Disposable implements ITerminalCo
 
 		// Determine if we're completing the command (first word) vs an argument
 		// We're in command position if there are no unescaped spaces before cursor
-		const wordsBeforeCursor = cursorPrefix.split(/(?<!\\) /);
+		const _splitOnUnescapedSpace = (s: string): string[] => s.split(' ').reduce<string[]>((acc, part, i) => {
+			if (i === 0) { acc.push(part); return acc; }
+			const prev = acc[acc.length - 1];
+			if (prev.endsWith('\\')) { acc[acc.length - 1] = prev.slice(0, -1) + ' ' + part; }
+			else { acc.push(part); }
+			return acc;
+		}, []);
+		const wordsBeforeCursor = _splitOnUnescapedSpace(cursorPrefix);
 		const isCommandPosition = wordsBeforeCursor.length <= 1 && !cursorPrefix.endsWith(' ');
 
 		// TODO: Leverage Fig's tokens array here?
 		// The last word (or argument). When the cursor is following a space it will be the empty
 		// string
-		let lastWord = cursorPrefix.endsWith(' ') ? '' : cursorPrefix.split(/(?<!\\) /).at(-1) ?? '';
+		let lastWord = cursorPrefix.endsWith(' ') ? '' : _splitOnUnescapedSpace(cursorPrefix).at(-1) ?? '';
 
 		// Ignore prefixes in the word that look like setting an environment variable
 		const matchEnvVarPrefix = lastWord.match(/^[a-zA-Z_]+=(?<rhs>.+)$/);

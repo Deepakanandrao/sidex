@@ -71,6 +71,13 @@ else {
 			licenseName: 'MIT',
 			licenseUrl: 'https://github.com/Razshy/sidexvs/blob/main/LICENSE',
 			serverLicenseUrl: 'https://github.com/Razshy/sidexvs/blob/main/LICENSE',
+			extensionsGallery: {
+				serviceUrl: 'https://marketplace.visualstudio.com/_apis/public/gallery',
+				controlUrl: 'https://az764295.vo.msecnd.net/extensions/marketplace.json',
+				extensionUrlTemplate: 'https://marketplace.visualstudio.com/_apis/public/gallery/publishers/{publisher}/vsextensions/{name}/{version}/vspackage',
+				resourceUrlTemplate: 'https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}',
+				nlsBaseUrl: 'https://az764295.vo.msecnd.net/extensions/{publisher}/{name}/{version}/{lang}.json',
+			},
 		});
 	}
 }

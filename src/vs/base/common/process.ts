@@ -36,7 +36,12 @@ else {
 
 		// Supported
 		get platform() { return isWindows ? 'win32' : isMacintosh ? 'darwin' : 'linux'; },
-		get arch() { return undefined; /* arch is undefined in web */ },
+		get arch() {
+			if ((globalThis as any).__SIDEX_TAURI__) {
+				return (globalThis as any).__SIDEX_ARCH__ || undefined;
+			}
+			return undefined;
+		},
 
 		// Unsupported
 		get env() { return {}; },

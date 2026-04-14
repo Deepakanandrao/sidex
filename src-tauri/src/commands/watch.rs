@@ -326,13 +326,73 @@ fn spawn_debounce_task(
             }
         }),
         Err(_) => {
-            log::warn!("[watch] no Tokio runtime for debounce task, file watching disabled for this watcher");
-            let rt = tokio::runtime::Builder::new_current_thread()
+            log::warn!("[watch] no Tokio runtime for debounce task, creating background thread");
+            let (stop_tx, mut stop_rx) = mpsc::unbounded_channel::<()>();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                rt.block_on(async move {
+                    let mut pending_events: Vec<PendingEvent> = Vec::new();
+                    let mut last_event_time: Option<tokio::time::Instant> = None;
+                    loop {
+                        tokio::select! {
+                            msg = rx.recv() => {
+                                match msg {
+                                    Some(event) => {
+                                        pending_events.push(event);
+                                        last_event_time = Some(tokio::time::Instant::now());
+                                    }
+                                    None => break,
+                                }
+                            }
+                            _ = stop_rx.recv() => break,
+                            _ = tokio::time::sleep(Duration::from_millis(10)) => {
+                                if let Some(last) = last_event_time {
+                                    if last.elapsed() >= debounce_duration && !pending_events.is_empty() {
+                                        let mut deduped: std::collections::HashMap<String, PendingEvent> = std::collections::HashMap::new();
+                                        for ev in pending_events.drain(..) {
+                                            deduped.insert(ev.path.to_string_lossy().to_string(), ev);
+                                        }
+                                        let events: Vec<WatchEvent> = deduped.into_values().map(|ev| {
+                                            WatchEvent {
+                                                path: ev.path.to_string_lossy().to_string(),
+                                                kind: event_kind_to_string(&ev.kind),
+                                                is_dir: ev.is_dir,
+                                                content: None,
+                                            }
+                                        }).collect();
+                                        if !events.is_empty() {
+                                            let batch = WatchEventBatch {
+                                                watch_id,
+                                                events,
+                                                timestamp: std::time::SystemTime::now()
+                                                    .duration_since(std::time::UNIX_EPOCH)
+                                                    .unwrap_or_default()
+                                                    .as_millis() as u64,
+                                            };
+                                            let _ = app.emit("watch-batch", batch);
+                                        }
+                                        last_event_time = None;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+            let sentinel_rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap();
-            let h = rt.spawn(async { std::future::pending::<()>().await });
-            return (tx, h.abort_handle());
+            let abort_handle = sentinel_rt.spawn(async move {
+                // Keep stop_tx alive until this task is aborted
+                let _keep = stop_tx;
+                std::future::pending::<()>().await;
+            }).abort_handle();
+            std::mem::forget(sentinel_rt);
+            return (tx, abort_handle);
         }
     };
 
@@ -341,7 +401,7 @@ fn spawn_debounce_task(
 
 /// Start watching multiple paths with advanced options
 #[tauri::command]
-pub fn watch_start(
+pub async fn watch_start(
     app: AppHandle,
     state: State<'_, Arc<WatchStore>>,
     paths: Vec<String>,

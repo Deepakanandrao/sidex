@@ -598,13 +598,28 @@ pub fn extension_search_paths(app: &AppHandle) -> Vec<PathBuf> {
 }
 
 pub fn scan_extensions(app: &AppHandle, paths: &[PathBuf]) -> Vec<ExtensionManifest> {
-    let disable_ids: HashSet<String> = std::env::var("SIDEX_DISABLE_EXTENSION_IDS")
+    let mut disable_ids: HashSet<String> = std::env::var("SIDEX_DISABLE_EXTENSION_IDS")
         .unwrap_or_else(|_| "ms-python.vscode-pylance".to_string())
         .split(',')
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect();
+
+    for id in &[
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "sswg.swift-lang",
+        "vscode.github-authentication",
+        "vscode.microsoft-authentication",
+    ] {
+        disable_ids.insert(id.to_string());
+    }
+
+    let disable_prefixes = vec![
+        "anysphere.cursor",
+        "cursor.",
+    ];
 
     let mut by_id: HashMap<String, ExtensionManifest> = HashMap::new();
     for search_path in paths {
@@ -633,7 +648,9 @@ pub fn scan_extensions(app: &AppHandle, paths: &[PathBuf]) -> Vec<ExtensionManif
                 Err(_) => continue,
             };
 
-            if disable_ids.contains(&manifest.id) {
+            if disable_ids.contains(&manifest.id)
+                || disable_prefixes.iter().any(|p| manifest.id.starts_with(p))
+            {
                 continue;
             }
 
@@ -768,8 +785,8 @@ pub fn build_init_data(
     }
 }
 
-pub fn read_vsix_manifest(
-    archive: &mut zip::ZipArchive<std::fs::File>,
+pub fn read_vsix_manifest<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
 ) -> Result<VsixManifest, String> {
     let pkg_path = "extension/package.json";
     let mut entry = archive

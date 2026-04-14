@@ -11,6 +11,25 @@
       globalThis._VSCODE_NLS_MESSAGES = [];
 
       globalThis.__SIDEX_TAURI__ = true;
+      try {
+        const ua = navigator.userAgent || '';
+        const plat = navigator.platform || '';
+        if (ua.includes('Mac') || plat.includes('Mac')) {
+          globalThis.__SIDEX_ARCH__ = 'arm64';
+          try {
+            const gl = document.createElement('canvas').getContext('webgl');
+            const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+            if (renderer && /Intel/i.test(renderer) && !/Apple/i.test(renderer)) {
+              globalThis.__SIDEX_ARCH__ = 'x64';
+            }
+          } catch (_) {}
+        } else {
+          globalThis.__SIDEX_ARCH__ = 'x64';
+        }
+      } catch (_) {
+        globalThis.__SIDEX_ARCH__ = 'x64';
+      }
       globalThis._VSCODE_PACKAGE_JSON = { version: '1.110.0', name: 'sidex' };
       globalThis._VSCODE_PRODUCT_JSON = {
         nameShort: 'SideX',

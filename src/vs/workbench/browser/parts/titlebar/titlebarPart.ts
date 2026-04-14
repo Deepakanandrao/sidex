@@ -470,6 +470,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 		// Draggable region that we can manipulate for #52522
 		this.dragRegion = prepend(this.rootContainer, $('div.titlebar-drag-region'));
+		this.dragRegion.setAttribute('data-tauri-drag-region', '');
 
 		// Menubar: install a custom menu bar depending on configuration
 		if (

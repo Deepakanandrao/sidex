@@ -22,11 +22,17 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false,
+        "useHttpsScheme": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/**", "/tmp/**"]
+      }
     }
   },
   "plugins": {
@@ -40,7 +46,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "copyright": "Copyright © 2026 Siden Technologies Inc. All rights reserved.",
+    "copyright": "Copyright \u00a9 2026 Siden Technologies Inc. All rights reserved.",
     "category": "DeveloperTool",
     "shortDescription": "A fast, open-source code editor.",
     "longDescription": "SideX is a fast, lightweight, open-source code editor built for developers.",
@@ -57,6 +63,7 @@
     ],
     "macOS": {
       "signingIdentity": "Developer ID Application: kima Booker (D983H3RN86)",
+      "entitlements": "entitlements.plist",
       "minimumSystemVersion": "10.15"
     },
     "windows": {
@@ -66,7 +73,10 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       }
     }
   }

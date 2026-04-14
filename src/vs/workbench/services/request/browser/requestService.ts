@@ -16,6 +16,7 @@ import { ILoggerService } from '../../../../platform/log/common/log.js';
 import { localize } from '../../../../nls.js';
 import { LogService } from '../../../../platform/log/common/logService.js';
 import { windowLogGroup } from '../../log/common/logConstants.js';
+import { bufferToStream, VSBuffer } from '../../../../base/common/buffer.js';
 
 export class BrowserRequestService extends AbstractRequestService implements IRequestService {
 
@@ -34,6 +35,11 @@ export class BrowserRequestService extends AbstractRequestService implements IRe
 	}
 
 	async request(options: IRequestOptions, token: CancellationToken): Promise<IRequestContext> {
+		const url = options.url ?? '';
+		if (url.startsWith('https://') || url.startsWith('http://')) {
+			return this.logAndRequest(options, () => this._tauriProxyRequest(options));
+		}
+
 		try {
 			if (!options.proxyAuthorization) {
 				options.proxyAuthorization = this.configurationService.inspect<string>('http.proxyAuthorization').userLocalValue;
@@ -52,6 +58,33 @@ export class BrowserRequestService extends AbstractRequestService implements IRe
 			}
 			throw error;
 		}
+	}
+
+	private async _tauriProxyRequest(options: IRequestOptions): Promise<IRequestContext> {
+		const { invoke } = await import('@tauri-apps/api/core');
+		const headers: Record<string, string> = {};
+		if (options.headers) {
+			for (const key of Object.keys(options.headers)) {
+				const val = options.headers[key];
+				if (typeof val === 'string') {
+					headers[key] = val;
+				}
+			}
+		}
+		const result = await invoke<{ status: number; headers: Record<string, string>; body_b64: string }>('proxy_request_full', {
+			url: options.url ?? '',
+			method: options.type ?? 'GET',
+			headers,
+			body: options.data ?? null,
+		});
+		const bodyBytes = Uint8Array.from(atob(result.body_b64), c => c.charCodeAt(0));
+		return {
+			res: {
+				statusCode: result.status,
+				headers: result.headers,
+			},
+			stream: bufferToStream(VSBuffer.wrap(bodyBytes)),
+		};
 	}
 
 	async resolveProxy(url: string): Promise<string | undefined> {

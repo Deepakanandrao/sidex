@@ -17,7 +17,7 @@ build/
 # ── WASM build artifacts (wasm-pack output) ──────────────────────────────────
 **/pkg/
 
-# ── Extensions (downloaded / installed at runtime) ───────────────────────────
+# ── Extensions (auto-installed on first dev/build via npm run setup) ──────────
 /extensions/
 
 # ── Cargo.lock for library crates ───────────────────────────────────────────

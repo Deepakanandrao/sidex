@@ -1,6 +1,7 @@
 pub mod compress;
 pub mod crypto;
 pub mod debug;
+pub mod ext_api;
 pub mod ext_host;
 pub mod extension_diagnostics;
 pub mod extension_platform;
@@ -26,6 +27,7 @@ pub mod window;
 pub use compress::*;
 pub use crypto::*;
 pub use debug::*;
+pub use ext_api::*;
 pub use ext_host::*;
 pub use extension_diagnostics::*;
 pub use extension_platform::*;
