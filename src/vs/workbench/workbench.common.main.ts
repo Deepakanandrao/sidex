@@ -369,7 +369,7 @@ import './contrib/workspaces/browser/workspaces.contribution.js';
 // import './contrib/list/browser/list.contribution.js';
 
 // SideX: removed — accessibility signals
-// import './contrib/accessibilitySignals/browser/accessibilitySignal.contribution.js';
+import './contrib/accessibilitySignals/browser/accessibilitySignal.contribution.js';
 
 // SideX: removed — bracket pair colorizer telemetry
 // import './contrib/bracketPairColorizer2Telemetry/browser/bracketPairColorizer2Telemetry.contribution.js';
