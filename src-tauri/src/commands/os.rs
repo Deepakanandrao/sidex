@@ -73,3 +73,16 @@ pub fn get_shell() -> String {
         }
     })
 }
+
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn get_user_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
+    let user_dir = dir.join("UserData");
+    std::fs::create_dir_all(&user_dir).map_err(|e| format!("failed to create UserData dir: {e}"))?;
+    Ok(user_dir.to_string_lossy().to_string())
+}

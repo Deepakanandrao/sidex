@@ -87,6 +87,7 @@ import {
 	IWorkspaceTrustManagementService
 } from '../../platform/workspace/common/workspaceTrust.js';
 import { TauriFileSystemProvider } from '../../platform/files/browser/tauriFileSystemProvider.js';
+import { TauriUserDataProvider } from '../../platform/files/browser/tauriUserDataProvider.js';
 import { IOpenerService } from '../../platform/opener/common/opener.js';
 import { mixin, safeStringify } from '../../base/common/objects.js';
 import { IProgressService } from '../../platform/progress/common/progress.js';
@@ -604,31 +605,34 @@ export class BrowserMain extends Disposable {
 		logsPath: URI
 	): Promise<void> {
 		// SideX: All persistent file I/O is routed through the Tauri backend
-		// (Rust `sidex-workspace` + `sidex-text`). Logs, user data, and tmp are
-		// kept in-memory for this session — there is no browser-side IndexedDB
-		// or HTML File System fallback.
+		// (Rust `sidex-workspace` + `sidex-text`). The `vscode-userdata:`
+		// scheme is persisted to the OS app-data directory so settings,
+		// extensions, themes, and keybindings survive refreshes.
 
-		fileService.registerProvider(logsPath.scheme, new InMemoryFileSystemProvider());
-
-		const userDataProvider = new InMemoryFileSystemProvider();
-		fileService.registerProvider(Schemas.vscodeUserData, userDataProvider);
-		this.registerDeveloperActions(userDataProvider);
-
-		// Local file access via Tauri backend
 		const isTauri =
 			typeof (globalThis as any).__TAURI_INTERNALS__ !== 'undefined' ||
 			typeof (globalThis as any).__TAURI__ !== 'undefined' ||
 			(globalThis as any).__SIDEX_TAURI__ === true;
+
+		fileService.registerProvider(logsPath.scheme, new InMemoryFileSystemProvider());
+
 		if (isTauri) {
-			const provider = new TauriFileSystemProvider();
-			fileService.registerProvider(Schemas.file, provider);
+			const userDataProvider = new TauriUserDataProvider();
+			fileService.registerProvider(Schemas.vscodeUserData, userDataProvider);
+			logService.info('[SideX] Registered TauriUserDataProvider for vscode-userdata:// scheme');
+
+			const fileProvider = new TauriFileSystemProvider();
+			fileService.registerProvider(Schemas.file, fileProvider);
 			logService.info('[SideX] Registered TauriFileSystemProvider for file:// scheme');
 
 			const vscodeFileProvider = new TauriFileSystemProvider();
 			fileService.registerProvider(Schemas.vscodeFileResource, vscodeFileProvider);
 			logService.info('[SideX] Registered TauriFileSystemProvider for vscode-file:// scheme');
 		} else {
-			logService.warn('[SideX] Tauri backend not detected — no file:// provider registered');
+			const userDataProvider = new InMemoryFileSystemProvider();
+			fileService.registerProvider(Schemas.vscodeUserData, userDataProvider);
+			this.registerDeveloperActions(userDataProvider);
+			logService.warn('[SideX] Tauri backend not detected — user-data is in-memory only');
 		}
 
 		fileService.registerProvider(Schemas.tmp, new InMemoryFileSystemProvider());

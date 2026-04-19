@@ -37,6 +37,9 @@ pub struct VsixPackage {
     pub icon: Option<Vec<u8>>,
     /// Raw file contents keyed by their path relative to `extension/`.
     pub contents: HashMap<String, Vec<u8>>,
+    /// Unix mode bits for each content entry (when present in the zip).
+    /// Used to restore `+x` on binaries shipped inside the VSIX.
+    pub modes: HashMap<String, u32>,
     pub vsix_manifest_xml: Option<String>,
 }
 
@@ -72,6 +75,7 @@ pub fn unpack_vsix(vsix_path: &Path) -> Result<VsixPackage> {
     let mut license_text: Option<String> = None;
     let mut icon: Option<Vec<u8>> = None;
     let mut contents: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut modes: HashMap<String, u32> = HashMap::new();
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
@@ -94,6 +98,7 @@ pub fn unpack_vsix(vsix_path: &Path) -> Result<VsixPackage> {
             continue;
         }
 
+        let unix_mode = entry.unix_mode();
         let mut buf = Vec::new();
         entry.read_to_end(&mut buf)?;
 
@@ -124,6 +129,9 @@ pub fn unpack_vsix(vsix_path: &Path) -> Result<VsixPackage> {
         }
 
         contents.insert(rel.to_string(), buf);
+        if let Some(mode) = unix_mode {
+            modes.insert(rel.to_string(), mode);
+        }
     }
 
     let json = manifest_json.context("missing extension/package.json in .vsix")?;
@@ -136,6 +144,7 @@ pub fn unpack_vsix(vsix_path: &Path) -> Result<VsixPackage> {
         license_text,
         icon,
         contents,
+        modes,
         vsix_manifest_xml,
     })
 }
@@ -217,6 +226,7 @@ pub fn install_package(pkg: &VsixPackage, extensions_dir: &Path) -> Result<Insta
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(&out_path, data)?;
+        apply_file_mode(&out_path, pkg.modes.get(rel_path).copied(), rel_path);
     }
 
     Ok(InstalledExtension {
@@ -224,6 +234,40 @@ pub fn install_package(pkg: &VsixPackage, extensions_dir: &Path) -> Result<Insta
         install_dir: ext_dir,
     })
 }
+
+/// Restore Unix executable bits for files shipped inside a VSIX.
+///
+/// VSIX archives sometimes carry executable binaries or shell scripts; the
+/// zip entries store POSIX modes in their external attributes. We apply them
+/// on install so extensions relying on `spawn(path)` don't fail with EACCES.
+/// As a safety net, files under `bin/` or with common script extensions get
+/// `+x` even when no mode was recorded.
+#[cfg(unix)]
+fn apply_file_mode(path: &Path, mode: Option<u32>, rel: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let is_script_like = rel.starts_with("bin/")
+        || rel.contains("/bin/")
+        || rel.ends_with(".sh")
+        || rel.ends_with(".command");
+
+    let target_mode = match mode {
+        Some(m) if m != 0 => m & 0o7777,
+        _ if is_script_like => 0o755,
+        _ => return,
+    };
+
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perms = meta.permissions();
+        if perms.mode() & 0o777 != target_mode & 0o777 {
+            perms.set_mode(target_mode);
+            let _ = std::fs::set_permissions(path, perms);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn apply_file_mode(_path: &Path, _mode: Option<u32>, _rel: &str) {}
 
 /// Convenience: unpack, validate, and install a `.vsix` file.
 pub fn install_vsix(vsix_path: &Path, extensions_dir: &Path) -> Result<InstalledExtension> {
@@ -259,6 +303,7 @@ mod tests {
             license_text: None,
             icon: None,
             contents: HashMap::from([("dist/main.js".into(), vec![])]),
+            modes: HashMap::new(),
             vsix_manifest_xml: None,
         };
         let r = validate_vsix(&pkg);
@@ -275,6 +320,7 @@ mod tests {
             license_text: Some("MIT".into()),
             icon: None,
             contents: HashMap::from([("dist/main.js".into(), vec![])]),
+            modes: HashMap::new(),
             vsix_manifest_xml: None,
         };
         let r = validate_vsix(&pkg);
@@ -294,6 +340,7 @@ mod tests {
                 ("package.json".into(), b"{}".to_vec()),
                 ("dist/main.js".into(), b"module.exports={}".to_vec()),
             ]),
+            modes: HashMap::new(),
             vsix_manifest_xml: None,
         };
         let r = validate_vsix(&pkg);
