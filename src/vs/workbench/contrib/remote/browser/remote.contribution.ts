@@ -639,14 +639,14 @@ class RemoteStatusBarIndicator extends Disposable implements IWorkbenchContribut
 	private buildEntry(label: string | null): IStatusbarEntry {
 		const text = label ? `$(remote) ${label}` : '$(remote)';
 		const ariaLabel = label
-			? localize('remote.statusbar.ariaConnected', 'Remote — connected to {0}', label)
-			: localize('remote.statusbar.aria', 'Open a remote window');
+			? localize('host.tooltip', 'Remote — connected to {0}', label)
+			: localize('noHost.tooltip', 'Open a Remote Window');
 		return {
-			name: localize('remote.statusbar.name', 'Open a Remote Window'),
+			name: localize('noHost.tooltip', 'Open a Remote Window'),
 			kind: label ? 'remote' : undefined,
 			text,
 			ariaLabel,
-			tooltip: localize('remote.statusbar.tooltip', 'Open a Remote Window'),
+			tooltip: localize('noHost.tooltip', 'Open a Remote Window'),
 			command: 'sidex.remote.openWindow'
 		};
 	}
